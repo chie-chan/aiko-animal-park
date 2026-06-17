@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>うちの子AIアート無料プレゼント受付</title>
+  <meta name="description" content="うちの子のお写真が、世界にひとつの水彩アートに。無料プレゼント受付中🐾 整理券をうけとって、できあがりを楽しみに待っててね。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://challenges.cloudflare.com">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #33253b;
+      --muted: #715f78;
+      --line: #f0c8da;
+      --pink: #d9538d;
+      --pink-dark: #aa356b;
+      --mint: #5bb7a5;
+      --mint-soft: #e7f7f3;
+      --amber: #d99a33;
+      --paper: #fffaf7;
+      --panel: #ffffff;
+      --sky: #eaf6ff;
+      --shadow: 0 16px 38px rgba(121, 62, 91, .16);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Zen Maru Gothic", system-ui, sans-serif;
+      overflow-x: hidden;
+      background:
+        linear-gradient(90deg, rgba(217,83,141,.07) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(91,183,165,.08) 1px, transparent 1px),
+        #fff5f9;
+      background-size: 28px 28px;
+    }
+
+    .page-art {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image: url("/images/uchinoko-gift-balloon-fit.webp");
+      background-repeat: no-repeat;
+      background-position: center 60%;
+      background-size: auto min(66vh, 500px);
+    }
+
+    .page { position: relative; z-index: 1; }
+
+    button, input, select, textarea { font: inherit; }
+    a { color: inherit; }
+
+    .page {
+      min-height: 100svh;
+      padding: 18px;
+    }
+
+    .shell {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      min-width: 0;
+    }
+
+    .hero {
+      display: block;
+      text-align: center;
+      padding: clamp(20px, 4vw, 44px) 0 20px;
+    }
+
+    .hero-copy {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.74);
+      color: var(--pink-dark);
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 8px 20px rgba(217,83,141,.12);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    h1 {
+      margin: 16px 0 12px;
+      font-size: clamp(32px, 4.4vw, 46px);
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    h1 span {
+      display: block;
+    }
+
+    .lead {
+      margin: 0 auto;
+      max-width: 600px;
+      color: var(--muted);
+      font-size: clamp(15px, 2.4vw, 19px);
+      line-height: 1.85;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+
+    .hero-actions { display: flex; justify-content: center; margin-top: 20px; }
+    .hero-actions .btn { min-width: 230px; }
+
+    .hero-headline {
+      max-width: 760px;
+      margin: 10px auto 0;
+    }
+    .hero-headline h1 { margin: 0 0 10px; }
+    .hero-headline .lead { margin: 0 auto; }
+
+    .hero .status-board { margin: 14px auto 0; max-width: 760px; }
+    .hero .status-board .metric { background: rgba(255, 255, 255, .86); }
+
+    .stage {
+      position: relative;
+      width: min(430px, 100%);
+      margin: 16px auto 0;
+    }
+
+    .stage-art {
+      display: block;
+      height: clamp(330px, 50vh, 460px);
+      width: auto;
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    .stage .status-board {
+      position: absolute;
+      inset: 4% 0 2%;
+      margin: 0;
+      max-width: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0;
+    }
+
+    .stage .status-board .metric {
+      width: min(64%, 190px);
+      background: rgba(255, 255, 255, .9);
+      border: 1px solid rgba(217, 83, 141, .16);
+      box-shadow: 0 10px 24px rgba(121, 62, 91, .2);
+      text-align: center;
+      padding: 9px 8px;
+    }
+
+    .stage .status-board .metric strong { font-size: 18px; }
+    .stage .status-board .metric span { font-size: 10.5px; line-height: 1.3; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 12px 18px;
+      border: 2px solid transparent;
+      border-radius: 12px;
+      background: var(--panel);
+      color: var(--ink);
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(80,40,60,.14); }
+    .btn.primary { background: var(--pink); color: #fff; }
+    .btn.secondary { border-color: var(--line); color: var(--pink-dark); }
+    .btn.mint { background: var(--mint); color: #fff; }
+    .btn:disabled { opacity: .58; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .status-board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 24px;
+      max-width: 680px;
+    }
+
+    .metric {
+      border: 1px solid rgba(217,83,141,.2);
+      border-radius: 14px;
+      background: rgba(255,255,255,.78);
+      padding: 14px;
+      box-shadow: 0 8px 22px rgba(121,62,91,.08);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 25px;
+      color: var(--pink-dark);
+      line-height: 1.1;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .visual {
+      display: grid;
+      place-items: center;
+      min-width: 0;
+      max-width: 100%;
+      padding: 0;
+    }
+
+    .visual img {
+      width: min(100%, 480px);
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .content-band {
+      display: grid;
+      grid-template-columns: minmax(0, 760px);
+      gap: 18px;
+      align-items: start;
+      justify-content: center;
+      padding-bottom: 48px;
+      scroll-margin-top: 10px;
+    }
+
+    @media (min-width: 861px) {
+      .flow-summary { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    }
+
+    .guide-step {
+      border-left: 5px solid var(--mint);
+      background: rgba(255,255,255,.78);
+      padding: 16px;
+      border-radius: 0 14px 14px 0;
+      box-shadow: 0 10px 24px rgba(80,40,60,.08);
+    }
+
+    .guide-step strong { display: block; margin-bottom: 4px; }
+    .guide-step p { margin: 0; color: var(--muted); line-height: 1.7; font-size: 14px; font-weight: 500; }
+
+    .ticket-panel, .form-panel {
+      min-width: 0;
+      max-width: 100%;
+      background: transparent;
+      border: none;
+      padding: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    #giftForm { display: grid; gap: 12px; }
+
+    .form-intro,
+    .ticket-head,
+    .ticket-panel > .notice.show,
+    .ticket-grid,
+    .ticket-panel .guide-step,
+    .mini-actions,
+    .download-grid:not([hidden]),
+    .flow-summary,
+    #giftForm .field {
+      background: rgba(255, 255, 255, .82);
+      backdrop-filter: blur(10px) saturate(1.04);
+      -webkit-backdrop-filter: blur(10px) saturate(1.04);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      box-shadow: 0 8px 22px rgba(121, 62, 91, .1);
+      margin: 0;
+    }
+
+    .form-intro .panel-title { margin: 0 0 4px; }
+    .form-intro .panel-sub { margin: 0; }
+
+    .panel-title {
+      margin: 0 0 6px;
+      font-size: 24px;
+      line-height: 1.3;
+    }
+
+    .panel-sub {
+      margin: 0 0 20px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-weight: 500;
+    }
+
+    .flow-summary {
+      list-style: none;
+      display: grid;
+      gap: 16px;
+    }
+
+    .flow-summary li {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      gap: 11px;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .flow-summary b {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--mint-soft);
+      color: #287d70;
+      border: 1px solid rgba(91,183,165,.32);
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .flow-summary strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .flow-summary small {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+      font-weight: 500;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+      margin-bottom: 15px;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .req {
+      color: var(--pink-dark);
+      font-size: 12px;
+      margin-left: 4px;
+    }
+
+    .field-note {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      margin-left: 8px;
+    }
+
+    input[type="text"], select, textarea {
+      width: 100%;
+      border: 2px solid #eed3df;
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px 13px;
+      color: var(--ink);
+      outline: none;
+    }
+
+    textarea {
+      min-height: 94px;
+      resize: vertical;
+      line-height: 1.7;
+    }
+
+    input:focus, select:focus, textarea:focus { border-color: var(--mint); box-shadow: 0 0 0 4px rgba(91,183,165,.14); }
+
+    .upload {
+      border: 2px dashed #df9dbd;
+      border-radius: 16px;
+      background: #fff7fb;
+      min-height: 172px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 16px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+
+    .upload.has-image {
+      border-style: solid;
+      background: #f8fffc;
+    }
+
+    .upload img {
+      width: 100%;
+      max-height: 260px;
+      object-fit: contain;
+      border-radius: 12px;
+    }
+
+    .upload-closed-art {
+      width: min(360px, 92%);
+      max-height: 280px;
+      object-fit: contain;
+      border-radius: 0;
+      mix-blend-mode: multiply;
+    }
+
+    .upload strong {
+      display: block;
+      color: var(--pink-dark);
+      margin-bottom: 6px;
+    }
+
+    .upload span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .upload.is-disabled {
+      min-height: 260px;
+      cursor: not-allowed;
+      background: #f8f3f6;
+      border-color: #ead0dd;
+    }
+
+    input:disabled,
+    select:disabled,
+    textarea:disabled {
+      opacity: .58;
+      cursor: not-allowed;
+      background: #f8f3f6;
+    }
+
+    .two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .choice-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .choice-grid.three { grid-template-columns: repeat(3, 1fr); }
+
+    .choice {
+      position: relative;
+      border: 2px solid #ecd2dd;
+      border-radius: 14px;
+      padding: 12px;
+      cursor: pointer;
+      background: #fff;
+    }
+
+    .choice input {
+      position: absolute;
+      inset: 12px 12px auto auto;
+      accent-color: var(--pink);
+    }
+
+    .choice strong {
+      display: block;
+      padding-right: 26px;
+      line-height: 1.35;
+    }
+
+    .choice span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+
+    .choice:has(input:checked) {
+      border-color: var(--mint);
+      background: var(--mint-soft);
+    }
+
+    .consent {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      border: 2px solid #f1c8d9;
+      border-radius: 14px;
+      padding: 13px;
+      background: #fffafd;
+      font-weight: 500;
+      font-size: 13.5px;
+      line-height: 1.75;
+    }
+
+    .consent input {
+      width: 20px;
+      height: 20px;
+      margin-top: 3px;
+      flex: 0 0 auto;
+      accent-color: var(--pink);
+    }
+
+    .notice {
+      display: none;
+      border: 2px solid #f5c77c;
+      background: #fff8e8;
+      color: #7a4c0a;
+      padding: 12px;
+      border-radius: 14px;
+      line-height: 1.7;
+      font-weight: 500;
+      margin-bottom: 14px;
+    }
+
+    .notice.show { display: block; }
+    .notice.error { border-color: #f4a1b8; background: #fff1f5; color: #9c1f54; }
+    .notice.ok { border-color: #a8decf; background: #f1fffb; color: #227768; }
+
+    .bot-field {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+
+    .turnstile-gate {
+      display: none;
+      margin: 14px 0 2px;
+      padding: 12px;
+      border: 1px solid #cbe8df;
+      border-radius: 14px;
+      background: #f5fffb;
+    }
+
+    .turnstile-gate.is-active {
+      display: flex;
+      justify-content: center;
+    }
+
+    .turnstile-gate.is-loading::before {
+      content: "送信前の確認をしています…";
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .choice.is-disabled {
+      opacity: .58;
+      cursor: not-allowed;
+    }
+    .choice.is-disabled input {
+      cursor: not-allowed;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 18px;
+    }
+
+    .help {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+      font-weight: 500;
+    }
+
+    .ticket-panel[hidden], .form-panel[hidden], .content-band[hidden], .hero[hidden] { display: none; }
+
+    .ticket-only .content-band {
+      padding-top: clamp(18px, 4vw, 44px);
+    }
+
+    .ticket-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin: 0;
+    }
+
+    .ticket-head .panel-sub { margin: 0; }
+
+    .ticket-no {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--mint-soft);
+      color: #287d70;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .ticket-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .ticket-url-box {
+      background: rgba(255, 255, 255, .82);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      box-shadow: 0 8px 22px rgba(121, 62, 91, .1);
+    }
+
+    .ticket-url-box label {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .ticket-url-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .ticket-url-row input {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--pink-dark);
+    }
+
+    .ticket-url-help {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+      font-weight: 500;
+    }
+
+    .ticket-cell {
+      border: 1px solid rgba(217, 83, 141, .18);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, .72);
+    }
+
+    .ticket-cell strong {
+      display: block;
+      color: var(--pink-dark);
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .ticket-cell span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 5px;
+    }
+
+    .download-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .download-card {
+      border: 1px solid #efd2df;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .download-card img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 2 / 3;
+      object-fit: contain;
+      background: #fff;
+    }
+
+    .download-card a {
+      display: block;
+      padding: 10px;
+      text-align: center;
+      font-weight: 700;
+      text-decoration: none;
+      color: var(--pink-dark);
+    }
+
+    .mini-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    @media (max-width: 860px) {
+      .page { padding: 12px; }
+      .hero { grid-template-columns: 1fr; min-height: auto; padding-top: 18px; width: 100%; max-width: 100%; overflow: hidden; }
+      .hero-copy { width: 100%; }
+      h1 { font-size: 33px; line-height: 1.22; }
+      .lead { max-width: 100%; font-size: 15px; }
+      .visual { min-height: 0; margin: 6px 0 2px; }
+      .visual img { width: min(64%, 240px); opacity: 1; }
+      .hero-actions .btn { width: 100%; }
+      .content-band { grid-template-columns: 1fr; }
+      .status-board { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .status-board .metric { padding: 11px 8px; text-align: center; }
+      .status-board .metric strong { font-size: 17px; line-height: 1.25; }
+      .status-board .metric span { font-size: 10.5px; line-height: 1.3; }
+      .two, .choice-grid, .choice-grid.three, .ticket-grid { grid-template-columns: 1fr; }
+      .ticket-url-row { grid-template-columns: 1fr; }
+      .form-actions .btn, .mini-actions .btn { width: 100%; }
+      .ticket-head { flex-direction: column; }
+    }
+
+    @media (max-width: 520px) {
+      .shell { width: 100%; }
+      .field-note { display: block; margin-left: 0; margin-top: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-art" aria-hidden="true"></div>
+  <div class="page">
+    <main class="shell">
+      <section class="hero" id="hero">
+        <div class="hero-copy">
+          <div class="brand">🎁 うちの子AIアート 無料プレゼント</div>
+          <div class="hero-headline">
+            <h1><span>うちの子が、</span><span>世界にひとつの一枚に</span></h1>
+            <p class="lead">お写真1枚から、やさしい水彩アートを無料でお作りします🐾 整理券をうけとって、のんびり待っててね。完成したらInstagramでお披露目します🎉</p>
+          </div>
+          <div class="hero-actions">
+            <a href="#reception" class="btn primary">🎁 受付フォームへすすむ</a>
+          </div>
+          <div class="status-board" aria-live="polite">
+            <div class="metric"><strong id="waitCount">--</strong><span>ただいまの待ち</span></div>
+            <div class="metric"><strong id="etaText">--</strong><span>できあがり目安</span></div>
+            <div class="metric"><strong>1枚ずつ</strong><span>心を込めてお届け</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content-band" id="reception">
+        <section class="form-panel" id="formPanel">
+          <div class="form-intro">
+            <h2 class="panel-title">🎁 無料プレゼント受付</h2>
+            <p class="panel-sub">完成作品を「みんなの作例」としてSNSやショップ等で紹介させていただくのが、無料の理由です🐾 非公開の希望は有料オーダーへどうぞ。</p>
+          </div>
+
+          <ol class="flow-summary" aria-label="受付の流れ">
+            <li><b>1</b><span><strong>写真とInstagram IDを送る</strong><small>お顔が見える明るい写真がおすすめ</small></span></li>
+            <li><b>2</b><span><strong>整理券URLを保存する</strong><small>完成まで順番と目安を確認できます</small></span></li>
+            <li><b>3</b><span><strong>完成したら画像をダウンロード</strong><small>整理券ページに完成画像が表示されます</small></span></li>
+          </ol>
+
+          <div class="notice" id="formNotice"></div>
+          <div class="notice" id="availabilityNotice"></div>
+
+          <form id="giftForm" novalidate>
+            <div class="field">
+              <label>うちの子のお写真 <span class="req">必須</span></label>
+              <label class="upload" id="uploadBox" for="photoInput">
+                <span>
+                  <strong>📷 タップして写真をえらぶ</strong>
+                  <span>ペットだけが写っていて、元写真として公開OKな一枚をえらんでね🐾</span>
+                </span>
+              </label>
+              <input id="photoInput" name="photo" type="file" accept="image/*" hidden>
+            </div>
+
+            <div class="two">
+              <div class="field">
+                <label for="petName">うちの子のおなまえ <span class="req">必須</span></label>
+                <input id="petName" name="petName" type="text" autocomplete="off" maxlength="40" placeholder="例：ぽんず">
+              </div>
+              <div class="field">
+                <label for="petCount">写真に写ってるペットの数は？ <span class="req">必須</span></label>
+                <select id="petCount" name="petCount">
+                  <option value="">えらんでください</option>
+                  <option value="1">1匹</option>
+                  <option value="2">2匹</option>
+                  <option value="3">3匹</option>
+                  <option value="4+">4匹以上</option>
+                </select>
+                <input id="species" name="species" type="hidden" value="ペット">
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="breed">犬種・猫種など <span style="font-weight:400;color:var(--muted);font-size:12px;">（わかれば）</span></label>
+              <input id="breed" name="breed" type="text" autocomplete="off" maxlength="60" placeholder="例：トイプードル、ミックス、キジトラ">
+            </div>
+
+            <div class="field">
+              <label>すきなテイスト <span class="req">必須</span></label>
+              <div class="choice-grid three">
+                <label class="choice">
+                  <input type="radio" name="taste" value="watercolor_default" checked>
+                  <strong>🎨 水彩定番</strong>
+                  <span>迷ったらこれ。やさしい定番の水彩タッチ。</span>
+                </label>
+                <label class="choice">
+                  <input type="radio" name="taste" value="seasonal_flower">
+                  <strong>🌿 紫陽花入り水彩</strong>
+                  <span>水彩定番に、淡い紫陽花をそっと添えます。</span>
+                </label>
+                <label class="choice">
+                  <input type="radio" name="taste" value="aiko_omakase">
+                  <strong>🎁 おまかせ</strong>
+                  <span>何が届くかはお楽しみ！完全にあいこにおまかせ🐾</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="freeNote">うちの子のこと、ひとことメモ <span style="font-weight:400;color:var(--muted);font-size:12px;">（任意）</span></label>
+              <textarea id="freeNote" name="freeNote" maxlength="400" placeholder="毛色や性格、入れたい雰囲気など🐾"></textarea>
+            </div>
+
+            <div class="field">
+              <label for="instagramId">Instagram ID <span class="req">必須</span><span class="field-note">完成したらInstagramで@メンションしてお知らせします</span></label>
+              <input id="instagramId" name="instagramId" type="text" autocomplete="off" maxlength="30" placeholder="例：uchinoko.aiko（@は省略OK）">
+            </div>
+
+            <div class="field">
+              <label>できあがりの受け取り方</label>
+              <div class="choice-grid">
+                <label class="choice">
+                  <input type="radio" name="plan" value="normal" checked>
+                  <strong>🎟️ 順番受付（無料）</strong>
+                  <span>整理券の順番に、心をこめてお作りします。</span>
+                </label>
+                <label class="choice">
+                  <input type="radio" name="plan" value="rush">
+                  <strong>⚡ 優先制作（¥980）</strong>
+                  <span>非公開で受け取りたい方、早めにほしい方へ。</span>
+                </label>
+              </div>
+            </div>
+
+            <label class="consent">
+              <input id="okShare" name="okShare" type="checkbox">
+              <span>送信した写真（ビフォー）・完成作品（アフター）・Instagram IDを、制作事例としてSNSやショップ等で紹介することに同意します（無料プレゼントの条件です）。人物の顔・住所や名前・車のナンバーなどが写る写真は送らないでください。<span class="req">必須</span></span>
+            </label>
+
+            <div class="bot-field" aria-hidden="true">
+              <label for="website">Website</label>
+              <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+            </div>
+
+            <div class="turnstile-gate" id="turnstileGate" aria-label="送信前の確認"></div>
+
+            <div class="form-actions">
+              <button class="btn primary" id="submitBtn" type="submit">🎟️ 整理券をうけとる</button>
+              <a class="btn secondary" id="paidOrderLink" href="https://aikoanimal.base.shop/items/146802769" target="_blank" rel="noopener">🤫 非公開の希望は有料オーダーへ</a>
+            </div>
+            <p class="help">送信すると、あなた専用の整理券URLが出ます。スクショかコピーで保存してね🎟️</p>
+          </form>
+        </section>
+
+        <section class="ticket-panel" id="ticketPanel" hidden>
+          <div class="ticket-head">
+            <div>
+              <h2 class="panel-title" id="ticketTitle">整理券</h2>
+              <p class="panel-sub" id="ticketLead">進み具合を確認しています。</p>
+            </div>
+            <div class="ticket-no" id="ticketNo">No. --</div>
+          </div>
+          <div class="notice ok" id="ticketNotice"></div>
+          <div class="ticket-url-box">
+            <label for="ticketUrlInput">整理券URL</label>
+            <div class="ticket-url-row">
+              <input id="ticketUrlInput" type="text" readonly value="" aria-label="整理券URL">
+              <a class="btn secondary" id="openTicketLink" href="#" target="_self">開く</a>
+            </div>
+            <p class="ticket-url-help">コピーできない時は、このURL欄を長押しして保存するか、この画面をスクショしてね。消えてしまった時はInstagram IDを教えてください。こちらで確認できます。</p>
+          </div>
+          <div class="ticket-grid">
+            <div class="ticket-cell"><strong id="aheadCount">--</strong><span>あなたの前に並んでいる子</span></div>
+            <div class="ticket-cell"><strong id="ticketEta">--</strong><span>できあがり目安</span></div>
+            <div class="ticket-cell"><strong id="ticketStatus">--</strong><span>いまの様子</span></div>
+          </div>
+          <div class="guide-step">
+            <strong id="ticketPet">うちの子</strong>
+            <p id="ticketMeta">スタイルとInstagram IDを表示します。</p>
+          </div>
+          <div class="mini-actions">
+            <button class="btn secondary" id="copyTicketBtn" type="button">🎟️ 整理券URLをコピー</button>
+            <a class="btn mint" id="rushBtn" href="https://aikoanimal.base.shop/items/146802769" target="_blank" rel="noopener">⚡ 優先制作にする（¥980）</a>
+            <a class="btn secondary" id="lineBtn" href="#" target="_blank" rel="noopener" hidden>LINEで質問する</a>
+          </div>
+          <div class="download-grid" id="downloadGrid" hidden></div>
+        </section>
+      </section>
+    </main>
+  </div>
+  <script src="/uchinoko-reception.js?v=20260616-pet-count-1"></script>
+</body>
+</html>

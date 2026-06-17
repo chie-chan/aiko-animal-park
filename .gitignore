@@ -1,0 +1,59 @@
+# Dependencies and build output
+node_modules/
+dist/
+dist.bak-*/
+
+# Local Cloudflare/Firebase state
+.wrangler/
+.firebase/
+.wrangler*.log
+.wrangler*.err.log
+
+# Secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*secret*
+*token*
+serviceAccount*.json
+
+# Logs and temporary verification output
+*.log
+*.err.log
+audit-*.log
+audit-*.err.log
+codex-temp/
+codex-checks/
+qa-screenshots/
+tmp-chrome-check*/
+
+# Large or separate local projects kept out of the free-gift baseline repo
+nanto-maker/
+
+# Generated/customer-facing media archives that are not needed for the
+# free gift Cloudflare/PARK recovery path.
+public/*
+!public/_redirects
+!public/uchinoko-reception.html
+!public/uchinoko-reception.js
+!public/images/
+public/images/*
+!public/images/uchinoko-gift-*
+!public/assets/
+public/assets/*
+!public/assets/gift-instagram/
+public/assets/gift-instagram/*
+!public/assets/gift-instagram/photo-to-illustration-cover.png
+!public/assets/gift-instagram/profile-link-cta.png
+
+# Local reveal images are generated per ticket and should not be retained in Git.
+public/assets/gift-instagram/reveals/
+
+# Backup snapshots
+*.bak
+*.bak-*
+*.backup
+*-backup.*

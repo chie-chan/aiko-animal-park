@@ -1,0 +1,5 @@
+/fortune https://nanto-maker.pages.dev/fortune 302
+/uranai https://nanto-maker.pages.dev/fortune 302
+/uchinoko-gift /uchinoko-reception 200
+/uchinoko-gift/ /uchinoko-reception 200
+/gift/* /uchinoko-reception 200

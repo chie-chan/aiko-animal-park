@@ -1,0 +1,16 @@
+name = "aiko-animal-park"
+compatibility_date = "2026-06-12"
+pages_build_output_dir = "dist"
+
+[[kv_namespaces]]
+binding = "GIFT_KV"
+id = "8b8226ddbc5448228c51721b60e39501"
+
+[vars]
+GIFT_DAILY_ACCEPT_LIMIT = "30"
+GIFT_DAILY_PROCESS_LIMIT = "30"
+GIFT_MIN_ETA_DAYS = "7"
+GIFT_RUSH_BASE_URL = "https://aikoanimal.base.shop/items/146802769"
+GIFT_PAID_ORDER_URL = "https://aikoanimal.base.shop/items/146802769"
+GIFT_LINE_URL = "https://lin.ee/hsoPQut"
+GIFT_INSTAGRAM_ACCOUNT = "@uchinoko.aiko"
