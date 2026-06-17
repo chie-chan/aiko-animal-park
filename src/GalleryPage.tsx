@@ -176,7 +176,7 @@ const GALLERY_STYLE_SECTIONS: Array<{
     title: "ジオラマ",
     description: "小さな世界にうちの子を置いた、物語のあるジオラマ系スタイルです。",
     entries: [
-      { id: "D001", title: "ピクニック", image: "/assets/style-samples/style-miniature-diorama-picnic.webp", tag: "ジオラマ", size: "landscape" },
+      { id: "D001", title: "ピクニック", image: "/assets/style-samples/style-miniature-diorama-picnic.png", tag: "ジオラマ", size: "landscape" },
       { id: "Q308", title: "紫陽花ピクニック", image: "/assets/style-samples/style-diorama-hydrangea-picnic.webp", tag: "ジオラマ", size: "square" },
       { id: "Q320", title: "エーゲ海", image: "/assets/style-samples/style-diorama-aegean-sea.webp", tag: "ジオラマ", size: "square" },
     ],
