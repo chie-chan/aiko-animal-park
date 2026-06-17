@@ -204,7 +204,7 @@
   }
 
   function setFreeFormClosed(isClosed) {
-    const disabledIds = ["photoInput", "petName", "petCount", "species", "breed", "freeNote", "instagramId", "okShare", "submitBtn"];
+    const disabledIds = ["photoInput", "petName", "petCount", "species", "breed", "instagramId", "okShare", "submitBtn"];
     disabledIds.forEach((id) => {
       const el = $(id);
       if (el) el.disabled = isClosed;
@@ -327,7 +327,6 @@
     const petCount = $("petCount").value.trim();
     const species = ($("species") ? $("species").value.trim() : "") || "ペット";
     const breed = $("breed").value.trim();
-    const freeNote = $("freeNote").value.trim();
     const instagramId = normalizeInstagramId($("instagramId").value);
     const taste = readSelected("taste");
     const galleryCode = ($("galleryCode") ? $("galleryCode").value : "").trim();
@@ -341,7 +340,7 @@
     if (taste === "gallery_reference" && !galleryCode) return {error: "ギャラリー番号を入力してください。"};
     if (!okShare) return {error: "無料プレゼントは、元写真・完成作品・Instagram IDの掲載同意が必要です。非公開の希望は有料オーダーへどうぞ。"};
     if (state.freeReception?.isClosed && plan !== "rush") return {error: freeClosedMessage()};
-    if ([petName, species, breed, freeNote, instagramId].some(hasContactInfo)) {
+    if ([petName, species, breed, instagramId].some(hasContactInfo)) {
       return {error: "個人情報が入っていないか確認して、もう一度送信してください。"};
     }
     if (state.turnstile.enabled && !state.turnstile.token) {
@@ -355,7 +354,6 @@
         petCount,
         species,
         breed,
-        freeNote,
         instagramId,
         taste,
         galleryCode,
