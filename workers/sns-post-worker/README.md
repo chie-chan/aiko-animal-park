@@ -75,6 +75,19 @@ The script deploys a temporary live config with `SNS_API_POSTING_ENABLED=true`
 and Cron `*/5 * * * *`. It does not change the checked-in `wrangler.toml`,
 which must remain posting disabled and `crons=[]`.
 
+## Guarded Safe Rollback Deploy
+
+After explicit approval, this deploys the checked-in safe config again:
+
+```powershell
+cd C:\Users\genge\Desktop\aiko-animal-park
+npm run deploy:sns-worker:safe -- --ack DEPLOY_CLOUDFLARE_SAFE_ROLLBACK_OK --ack COST_RISK_ACCEPTED
+```
+
+The safe deploy refuses to run unless checked-in `wrangler.toml` is still
+`SNS_API_POSTING_ENABLED=false` and `crons=[]`. It is intended for rollback or
+post-test shutdown and still changes Cloudflare external state.
+
 ## Cutover Audit
 
 From Local HQ:
