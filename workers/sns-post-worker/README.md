@@ -81,6 +81,26 @@ writes require all of:
 - `--ack FIREBASE_SNS_WORKERS_PAUSED`
 - `--ack LIVE_QUEUE_REVIEWED`
 
+Test-only KV writes use a separate gate and mark the copied item as
+`testOnly`/`dryRun`:
+
+```powershell
+node local-ops\scripts\sns-cloudflare-migration.js --from-file local-ops\scripts\fixtures\sns-cloudflare-migration-sample.json --test-write-cloudflare --ack WRITE_CLOUDFLARE_TEST_KV_OK
+```
+
+## Cutover Plan
+
+From Local HQ:
+
+```powershell
+cd C:\Users\genge\aikoanimal-hosting-new
+node local-ops\scripts\sns-cloudflare-cutover-plan.js
+```
+
+The plan is local-only and lists the explicit approval text required before
+Cloudflare deploys, secret writes, KV writes, Firebase worker pauses, or Cron
+enablement.
+
 ## Deployment Phases
 
 1. Deploy with current config: no Cron and posting disabled.
