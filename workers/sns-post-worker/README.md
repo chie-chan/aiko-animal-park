@@ -49,13 +49,15 @@ After explicit approval only:
 
 ```powershell
 cd C:\Users\genge\Desktop\aiko-animal-park
-npm run deploy:sns-worker:dry-run -- --ack DEPLOY_CLOUDFLARE_DRY_RUN_OK --ack COST_RISK_ACCEPTED
+npm run deploy:sns-worker:dry-run -- --ack DEPLOY_CLOUDFLARE_DRY_RUN_OK --ack COST_RISK_ACCEPTED --evidence-file C:\Users\genge\aikoanimal-hosting-new\local-ops\data\sns-cloudflare\evidence.json
 ```
 
 The deploy script refuses to run unless `SNS_API_POSTING_ENABLED=false` and
 `crons=[]` are still present in `workers/sns-post-worker/wrangler.toml`. It
 also requires `COST_RISK_ACCEPTED` because even dry-run deployment changes
-Cloudflare state and can count as Workers usage.
+Cloudflare state and can count as Workers usage. After a successful deploy, it
+prints local-only evidence update commands; replace the placeholder Worker URL
+with the URL from Wrangler's deploy output after review.
 
 ## Guarded Live Cron Deploy
 
@@ -151,7 +153,8 @@ node local-ops\scripts\sns-cloudflare-evidence-update.js --evidence local-ops\da
 
 The evidence helper performs no Cloudflare/Firebase calls and stores only
 status fields, secret names, Worker URL, and Scheduler job names. The dry-run
-deploy mark requires the deployed Worker URL. Do not put secret values,
+deploy mark requires the deployed Worker URL. `--init` refuses to overwrite an
+existing evidence file unless `--force` is set. Do not put secret values,
 customer data, or raw queue payloads in evidence files.
 
 ## Deployment Phases
