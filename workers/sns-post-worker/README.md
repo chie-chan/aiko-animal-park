@@ -138,6 +138,20 @@ The plan is local-only and lists the explicit approval text required before
 Cloudflare deploys, secret writes, KV writes, Firebase worker pauses, or Cron
 enablement.
 
+## Evidence Bookkeeping
+
+After a reviewed external step completes, update the local evidence file from
+Local HQ instead of hand-editing JSON:
+
+```powershell
+cd C:\Users\genge\aikoanimal-hosting-new
+node local-ops\scripts\sns-cloudflare-evidence-update.js --evidence local-ops\data\sns-cloudflare\evidence.json --mark dry-run-deploy --worker-url https://...
+```
+
+The evidence helper performs no Cloudflare/Firebase calls and stores only
+status fields, secret names, Worker URL, and Scheduler job names. Do not put
+secret values, customer data, or raw queue payloads in evidence files.
+
 ## Deployment Phases
 
 1. Deploy with current config: no Cron and posting disabled.
