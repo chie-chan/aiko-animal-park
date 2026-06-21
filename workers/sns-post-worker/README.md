@@ -55,6 +55,26 @@ npm run deploy:sns-worker:dry-run -- --ack DEPLOY_CLOUDFLARE_DRY_RUN_OK
 The deploy script refuses to run unless `SNS_API_POSTING_ENABLED=false` and
 `crons=[]` are still present in `workers/sns-post-worker/wrangler.toml`.
 
+## Guarded Live Cron Deploy
+
+After all cutover evidence has been reviewed and Aiko explicitly approves live
+posting only:
+
+```powershell
+cd C:\Users\genge\Desktop\aiko-animal-park
+npm run deploy:sns-worker:live -- --evidence C:\path\to\reviewed-evidence.json --ack DEPLOY_CLOUDFLARE_LIVE_OK --ack FIREBASE_SNS_WORKERS_PAUSED --ack LIVE_QUEUE_REVIEWED --ack SNS_SECRETS_VERIFIED --ack FIRST_POST_MONITORING_READY --ack COST_RISK_ACCEPTED
+```
+
+The live deploy script refuses to run unless the reviewed evidence proves:
+
+- Cloudflare dry-run deploy, admin health, secrets, KV dry-run, and live queue copy are complete.
+- Firebase SNS workers `snsApiPostWorkerDryRun` and `uchinokoGiftInstagramPostWorker` are paused.
+- Orders, LINE, BASE, and Firestore remain on Firebase.
+
+The script deploys a temporary live config with `SNS_API_POSTING_ENABLED=true`
+and Cron `*/5 * * * *`. It does not change the checked-in `wrangler.toml`,
+which must remain posting disabled and `crons=[]`.
+
 ## Cutover Audit
 
 From Local HQ:

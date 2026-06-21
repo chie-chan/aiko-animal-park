@@ -6,8 +6,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check:sns-worker": "node --check workers/sns-post-worker/src/index.mjs && node --check workers/sns-post-worker/scripts/deploy-dry-run.mjs && node workers/sns-post-worker/test/sns-post-worker.test.mjs",
+    "check:sns-worker": "node --check workers/sns-post-worker/src/index.mjs && node --check workers/sns-post-worker/scripts/deploy-dry-run.mjs && node --check workers/sns-post-worker/scripts/deploy-live.mjs && node workers/sns-post-worker/test/sns-post-worker.test.mjs",
     "deploy:sns-worker:dry-run": "node workers/sns-post-worker/scripts/deploy-dry-run.mjs",
+    "deploy:sns-worker:live": "node workers/sns-post-worker/scripts/deploy-live.mjs",
     "audit:server": "node scripts/catalog-audit-editor-server.cjs"
   },
   "dependencies": {
