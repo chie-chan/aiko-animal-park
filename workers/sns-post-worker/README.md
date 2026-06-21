@@ -146,11 +146,13 @@ Local HQ instead of hand-editing JSON:
 ```powershell
 cd C:\Users\genge\aikoanimal-hosting-new
 node local-ops\scripts\sns-cloudflare-evidence-update.js --evidence local-ops\data\sns-cloudflare\evidence.json --mark dry-run-deploy --worker-url https://...
+node local-ops\scripts\sns-cloudflare-evidence-update.js --evidence local-ops\data\sns-cloudflare\evidence.json --mark admin-health --worker-url https://...
 ```
 
 The evidence helper performs no Cloudflare/Firebase calls and stores only
-status fields, secret names, Worker URL, and Scheduler job names. Do not put
-secret values, customer data, or raw queue payloads in evidence files.
+status fields, secret names, Worker URL, and Scheduler job names. The dry-run
+deploy mark requires the deployed Worker URL. Do not put secret values,
+customer data, or raw queue payloads in evidence files.
 
 ## Deployment Phases
 
