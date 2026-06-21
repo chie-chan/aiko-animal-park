@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import {execFileSync} from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import {runWranglerDeploy} from "./lib/run-wrangler-deploy.mjs";
 
 const WORKER_DIR = path.resolve(import.meta.dirname, "..");
 const PARK_ROOT = path.resolve(WORKER_DIR, "..", "..");
@@ -80,11 +80,7 @@ function main() {
   }
   requireAcks(argv);
   assertSafeDryRunConfig();
-  execFileSync("npx.cmd", ["wrangler", "deploy", "--config", CONFIG_FILE], {
-    cwd: PARK_ROOT,
-    stdio: "inherit",
-    timeout: 120_000,
-  });
+  runWranglerDeploy(CONFIG_FILE, {cwd: PARK_ROOT});
   printEvidenceCommands(argValue(argv, "--evidence-file") || DEFAULT_EVIDENCE_FILE);
 }
 

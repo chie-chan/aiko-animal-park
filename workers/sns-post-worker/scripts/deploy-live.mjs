@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import {execFileSync} from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import {runWranglerDeploy} from "./lib/run-wrangler-deploy.mjs";
 
 const WORKER_DIR = path.resolve(import.meta.dirname, "..");
 const PARK_ROOT = path.resolve(WORKER_DIR, "..", "..");
@@ -135,11 +135,7 @@ function main() {
   const baseConfig = fs.readFileSync(CONFIG_FILE, "utf8");
   assertBaseConfigSafe(baseConfig);
   const liveConfigFile = writeTempLiveConfig(baseConfig);
-  execFileSync("npx.cmd", ["wrangler", "deploy", "--config", liveConfigFile], {
-    cwd: PARK_ROOT,
-    stdio: "inherit",
-    timeout: 120_000,
-  });
+  runWranglerDeploy(liveConfigFile, {cwd: PARK_ROOT});
 }
 
 try {
