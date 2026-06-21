@@ -40,8 +40,28 @@ approved before running.
 
 ```powershell
 cd C:\Users\genge\Desktop\aiko-animal-park
-node --check workers\sns-post-worker\src\index.mjs
-node workers\sns-post-worker\test\sns-post-worker.test.mjs
+npm run check:sns-worker
+```
+
+## Guarded Dry-Run Deploy
+
+After explicit approval only:
+
+```powershell
+cd C:\Users\genge\Desktop\aiko-animal-park
+npm run deploy:sns-worker:dry-run -- --ack DEPLOY_CLOUDFLARE_DRY_RUN_OK
+```
+
+The deploy script refuses to run unless `SNS_API_POSTING_ENABLED=false` and
+`crons=[]` are still present in `workers/sns-post-worker/wrangler.toml`.
+
+## Cutover Audit
+
+From Local HQ:
+
+```powershell
+cd C:\Users\genge\aikoanimal-hosting-new
+node local-ops\scripts\sns-cloudflare-cutover-audit.js
 ```
 
 ## Queue Migration Helper
