@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import {runWranglerDeploy} from "./lib/run-wrangler-deploy.mjs";
@@ -103,8 +102,7 @@ function writeTempLiveConfig(baseConfig) {
   if (!new RegExp(`crons\\s*=\\s*\\[\\s*"${LIVE_CRON.replace(/[/*]/g, "\\$&")}"\\s*\\]`).test(liveConfig)) {
     throw new Error("Live temp config did not enable the expected Cron.");
   }
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aiko-sns-live-"));
-  const file = path.join(dir, "wrangler.live.toml");
+  const file = path.join(WORKER_DIR, `wrangler.live.${process.pid}.${Date.now()}.tmp.toml`);
   fs.writeFileSync(file, liveConfig, "utf8");
   return file;
 }
@@ -135,7 +133,11 @@ function main() {
   const baseConfig = fs.readFileSync(CONFIG_FILE, "utf8");
   assertBaseConfigSafe(baseConfig);
   const liveConfigFile = writeTempLiveConfig(baseConfig);
-  runWranglerDeploy(liveConfigFile, {cwd: PARK_ROOT});
+  try {
+    runWranglerDeploy(liveConfigFile, {cwd: PARK_ROOT});
+  } finally {
+    fs.rmSync(liveConfigFile, {force: true});
+  }
 }
 
 try {
