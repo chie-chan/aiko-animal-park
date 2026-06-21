@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "check:sns-worker": "node --check workers/sns-post-worker/src/index.mjs && node workers/sns-post-worker/test/sns-post-worker.test.mjs",
     "audit:server": "node scripts/catalog-audit-editor-server.cjs"
   },
   "dependencies": {

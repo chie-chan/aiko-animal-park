@@ -1,0 +1,13 @@
+name = "aiko-sns-post-worker"
+main = "src/index.mjs"
+compatibility_date = "2026-06-21"
+
+[[kv_namespaces]]
+binding = "SNS_KV"
+id = "8b8226ddbc5448228c51721b60e39501"
+
+[vars]
+SNS_API_POSTING_ENABLED = "false"
+
+[triggers]
+crons = []
