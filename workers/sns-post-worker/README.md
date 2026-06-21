@@ -44,6 +44,23 @@ node --check workers\sns-post-worker\src\index.mjs
 node workers\sns-post-worker\test\sns-post-worker.test.mjs
 ```
 
+## Queue Migration Helper
+
+The Local HQ repository has a guarded helper:
+
+```powershell
+cd C:\Users\genge\aikoanimal-hosting-new
+node local-ops\scripts\sns-cloudflare-migration.js --help
+node local-ops\scripts\sns-cloudflare-migration.js --from-file local-ops\scripts\fixtures\sns-cloudflare-migration-sample.json
+```
+
+Firestore reads require `--ack READ_FIRESTORE_OK`. Production Cloudflare KV
+writes require all of:
+
+- `--ack WRITE_CLOUDFLARE_KV_OK`
+- `--ack FIREBASE_SNS_WORKERS_PAUSED`
+- `--ack LIVE_QUEUE_REVIEWED`
+
 ## Deployment Phases
 
 1. Deploy with current config: no Cron and posting disabled.
