@@ -49,11 +49,13 @@ After explicit approval only:
 
 ```powershell
 cd C:\Users\genge\Desktop\aiko-animal-park
-npm run deploy:sns-worker:dry-run -- --ack DEPLOY_CLOUDFLARE_DRY_RUN_OK
+npm run deploy:sns-worker:dry-run -- --ack DEPLOY_CLOUDFLARE_DRY_RUN_OK --ack COST_RISK_ACCEPTED
 ```
 
 The deploy script refuses to run unless `SNS_API_POSTING_ENABLED=false` and
-`crons=[]` are still present in `workers/sns-post-worker/wrangler.toml`.
+`crons=[]` are still present in `workers/sns-post-worker/wrangler.toml`. It
+also requires `COST_RISK_ACCEPTED` because even dry-run deployment changes
+Cloudflare state and can count as Workers usage.
 
 ## Guarded Live Cron Deploy
 
@@ -107,10 +109,12 @@ node local-ops\scripts\sns-cloudflare-migration.js --help
 node local-ops\scripts\sns-cloudflare-migration.js --from-file local-ops\scripts\fixtures\sns-cloudflare-migration-sample.json
 ```
 
-Firestore reads require `--ack READ_FIRESTORE_OK`. Production Cloudflare KV
+Firestore reads require `--ack READ_FIRESTORE_OK --ack COST_RISK_ACCEPTED`.
+Production Cloudflare KV
 writes require all of:
 
 - `--ack WRITE_CLOUDFLARE_KV_OK`
+- `--ack COST_RISK_ACCEPTED`
 - `--ack FIREBASE_SNS_WORKERS_PAUSED`
 - `--ack LIVE_QUEUE_REVIEWED`
 
@@ -118,7 +122,7 @@ Test-only KV writes use a separate gate and mark the copied item as
 `testOnly`/`dryRun`:
 
 ```powershell
-node local-ops\scripts\sns-cloudflare-migration.js --from-file local-ops\scripts\fixtures\sns-cloudflare-migration-sample.json --test-write-cloudflare --ack WRITE_CLOUDFLARE_TEST_KV_OK
+node local-ops\scripts\sns-cloudflare-migration.js --from-file local-ops\scripts\fixtures\sns-cloudflare-migration-sample.json --test-write-cloudflare --ack WRITE_CLOUDFLARE_TEST_KV_OK --ack COST_RISK_ACCEPTED
 ```
 
 ## Cutover Plan

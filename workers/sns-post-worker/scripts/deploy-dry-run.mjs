@@ -7,14 +7,24 @@ import process from "node:process";
 const WORKER_DIR = path.resolve(import.meta.dirname, "..");
 const PARK_ROOT = path.resolve(WORKER_DIR, "..", "..");
 const CONFIG_FILE = path.join(WORKER_DIR, "wrangler.toml");
-const REQUIRED_ACK = "DEPLOY_CLOUDFLARE_DRY_RUN_OK";
+const REQUIRED_ACKS = [
+  "DEPLOY_CLOUDFLARE_DRY_RUN_OK",
+  "COST_RISK_ACCEPTED",
+];
 
-function hasAck(argv) {
+function hasAck(argv, value) {
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--ack" && argv[i + 1] === REQUIRED_ACK) return true;
-    if (argv[i] === `--ack=${REQUIRED_ACK}`) return true;
+    if (argv[i] === "--ack" && argv[i + 1] === value) return true;
+    if (argv[i] === `--ack=${value}`) return true;
   }
   return false;
+}
+
+function requireAcks(argv) {
+  const missing = REQUIRED_ACKS.filter((ack) => !hasAck(argv, ack));
+  if (missing.length) {
+    throw new Error(`Missing required --ack value(s): ${missing.join(", ")}.`);
+  }
 }
 
 function assertSafeDryRunConfig() {
@@ -33,11 +43,13 @@ function assertSafeDryRunConfig() {
 function usage() {
   return [
     "Usage:",
-    `  node workers/sns-post-worker/scripts/deploy-dry-run.mjs --ack ${REQUIRED_ACK}`,
+    "  node workers/sns-post-worker/scripts/deploy-dry-run.mjs",
+    ...REQUIRED_ACKS.map((ack) => `    --ack ${ack}`),
     "",
     "This runs wrangler deploy with SNS_API_POSTING_ENABLED=false and crons=[].",
     "It still changes Cloudflare external state and can count as Workers usage,",
-    "so it must only be run after Aiko explicitly approves the dry-run deploy.",
+    "so it must only be run after Aiko explicitly approves the dry-run deploy",
+    "and accepts the cost/usage risk.",
   ].join("\n");
 }
 
@@ -46,9 +58,7 @@ function main() {
     console.log(usage());
     return;
   }
-  if (!hasAck(process.argv.slice(2))) {
-    throw new Error(`Missing --ack ${REQUIRED_ACK}. This Cloudflare deploy requires explicit approval.`);
-  }
+  requireAcks(process.argv.slice(2));
   assertSafeDryRunConfig();
   execFileSync("npx.cmd", ["wrangler", "deploy", "--config", CONFIG_FILE], {
     cwd: PARK_ROOT,
