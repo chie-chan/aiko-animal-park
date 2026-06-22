@@ -57,3 +57,4 @@ public/assets/gift-instagram/reveals/
 *.bak-*
 *.backup
 *-backup.*
+*_backup.*

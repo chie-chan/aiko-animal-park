@@ -5,6 +5,7 @@ import {
   clamp,
   defaultCuts,
   linePosition,
+  makeImageTransparent,
   readFileAsDataUrl,
   safeCuts,
   splitSheetImage,
@@ -13,7 +14,7 @@ import {
 // ======================================================================
 // Step2Splitter ―  シートをセルに分割（ライブプレビュー＋クリック拡大）
 // gridSize=4 → 4×4=16セル、gridSize=3 → 3×3=9セル。両方に対応。
-// 前提：ユーザーは透過ソフト（Canva・remove.bg等）で背景透過済みのPNGをアップロードする
+// 白背景のPNGをアップロードすると白い背景を自動で透過（縁フラッドフィル）→分割する。透過済みPNGならトグルOFFでそのまま使える。
 // ======================================================================
 
 interface Props {
@@ -32,6 +33,17 @@ interface Props {
 type DragAxis = "vertical" | "horizontal";
 
 const OUTER_PADDING = 0;
+
+// 分割プレビューの背景切替（透過の見やすさ用）
+const CHECKER_BG =
+  "repeating-conic-gradient(#f4ebf3 0deg 90deg, #fff 90deg 180deg) 0 0 / 10px 10px";
+const LIVE_BGS: { key: string; label: string; css: string; swatch: string }[] = [
+  { key: "checker", label: "市松", css: CHECKER_BG, swatch: "repeating-conic-gradient(#e8dbe5 0deg 90deg, #fff 90deg 180deg) 0 0 / 6px 6px" },
+  { key: "white", label: "白", css: "#ffffff", swatch: "#ffffff" },
+  { key: "black", label: "黒", css: "#2b2b2b", swatch: "#2b2b2b" },
+  { key: "pink", label: "桃", css: "#ffd9e7", swatch: "#ffd9e7" },
+  { key: "blue", label: "青", css: "#cfe6ff", swatch: "#cfe6ff" },
+];
 
 interface CellRegion {
   x: number; // 0-100%
@@ -77,6 +89,36 @@ export default function Step2Splitter(props: Props) {
     );
   }
 
+  // 白背景の自動透過トグル（共通レンダー）
+  function renderTransparentToggle(extraClass = "") {
+    return (
+      <label
+        className={`v2-bg-transparent-toggle ${extraClass}`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 12.5,
+          fontWeight: 800,
+          color: "var(--v2-ink)",
+          cursor: processing ? "wait" : "pointer",
+          opacity: processing ? 0.6 : 1,
+        }}
+        title="白い背景を自動で透明にします（縁から繋がった白だけを抜くので、目の白や白文字は残ります）"
+      >
+        <input
+          type="checkbox"
+          checked={bgTransparent}
+          disabled={processing}
+          onChange={(e) => void toggleBgTransparent(e.target.checked)}
+          style={{ accentColor: "#b89bea", width: 16, height: 16 }}
+        />
+        ✨ 白い背景を自動で透過する
+        {processing && <span style={{ color: "var(--v2-pink)" }}>（処理中…）</span>}
+      </label>
+    );
+  }
+
   const cellCount = gridSize * gridSize;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const adjustPreviewRef = useRef<HTMLDivElement>(null);
@@ -84,6 +126,59 @@ export default function Step2Splitter(props: Props) {
   const [zoomCell, setZoomCell] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [trimGutter, setTrimGutter] = useState<number>(0);
+  // 白背景を自動透過するか（既定ON）。rawSrc=透過前の元画像を保持し、トグルで再生成する。
+  const [bgTransparent, setBgTransparent] = useState<boolean>(true);
+  const [rawSrc, setRawSrc] = useState<string | null>(null);
+  const [processing, setProcessing] = useState<boolean>(false);
+  // 分割プレビューの背景（透過確認用・市松/白/黒/桃/青）
+  const [liveBg, setLiveBg] = useState<string>("checker");
+  const liveBgCss = (LIVE_BGS.find((b) => b.key === liveBg) ?? LIVE_BGS[0]).css;
+
+  // 取り込んだ画像に（必要なら）透過をかけて sheetSrc にセット
+  async function applyUploadedSrc(url: string) {
+    setRawSrc(url);
+    if (!bgTransparent) {
+      setSheetSrc(url);
+      setMessage("");
+      return;
+    }
+    setProcessing(true);
+    setMessage("背景を透過しています…");
+    try {
+      const out = await makeImageTransparent(url);
+      setSheetSrc(out);
+      setMessage("");
+    } catch (err) {
+      console.error(err);
+      setSheetSrc(url);
+      setMessage("透過に失敗したため、元の画像で読み込みました。");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  // 透過トグルの切替（元画像から作り直す）
+  async function toggleBgTransparent(next: boolean) {
+    setBgTransparent(next);
+    if (!rawSrc) return;
+    if (!next) {
+      setSheetSrc(rawSrc);
+      return;
+    }
+    setProcessing(true);
+    setMessage("背景を透過しています…");
+    try {
+      const out = await makeImageTransparent(rawSrc);
+      setSheetSrc(out);
+      setMessage("");
+    } catch (err) {
+      console.error(err);
+      setSheetSrc(rawSrc);
+      setMessage("透過に失敗したため、元の画像で読み込みました。");
+    } finally {
+      setProcessing(false);
+    }
+  }
 
   // ── 各列・行のサイズ（fr単位）を計算（プレビューグリッドの比率に使う） ──
   const gridStyle = useMemo(() => {
@@ -163,8 +258,7 @@ export default function Step2Splitter(props: Props) {
   async function handleFile(files: FileList | null) {
     if (!files || !files[0]) return;
     const url = await readFileAsDataUrl(files[0]);
-    setSheetSrc(url);
-    setMessage("");
+    await applyUploadedSrc(url);
   }
 
   // ── サンプル画像読み込み（デモ用） ──────────────────
@@ -178,8 +272,7 @@ export default function Step2Splitter(props: Props) {
       const blob = await res.blob();
       const reader = new FileReader();
       reader.onload = () => {
-        setSheetSrc(String(reader.result || ""));
-        setMessage("");
+        void applyUploadedSrc(String(reader.result || ""));
       };
       reader.readAsDataURL(blob);
     } catch (e) {
@@ -251,8 +344,9 @@ export default function Step2Splitter(props: Props) {
       <div className="v2-split-room" style={{ gridTemplateColumns: "1fr" }}>
         <section className="v2-split-left">
           <div className="v2-canva-reminder">
-            <strong>📷 背景透過済みのPNG</strong>をアップロードしてください。<br />
-            Canva・Photoshop・remove.bg など、お持ちの透過ソフトで先に背景を透明にしてからどうぞ。
+            <strong>📷 スタンプ画像（白背景でもOK）</strong>をアップロードしてください。<br />
+            下の「✨ 白い背景を自動で透過する」をONにすれば、白い背景はこのツールが自動で透明にします。
+            すでに透過済みのPNGならOFFにしてもOKです。
           </div>
 
           {/* サンプル参考表示 */}
@@ -276,18 +370,18 @@ export default function Step2Splitter(props: Props) {
             }}>
               <img
                 src="/stamp-v2-demo/sample-sheet.png"
-                alt={`透過済み${gridLabel}サンプル`}
+                alt={`${gridLabel}スタンプシートのサンプル`}
                 style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                 onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = "none"; }}
               />
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 900, color: "var(--v2-ink)", marginBottom: 6 }}>
-                ← こういう透過PNGをアップロード
+                ← こんなグリッド状のスタンプ画像をアップロード（白背景でもOK）
               </div>
               <p style={{ fontSize: 12, color: "var(--v2-muted)", lineHeight: 1.65, margin: "0 0 8px" }}>
-                白い背景がない（透明）、グリッド状のスタンプシートになっているのが理想です。
-                チェック柄が見える部分が「透過された場所」。
+                AIで作った4×4（または3×3）のスタンプシート画像をアップロードしてください。
+                白い背景でもOK。「✨ 白い背景を自動で透過する」がONなら、白い背景を自動で透明にします（チェック柄＝透過された場所）。
               </p>
               <button
                 type="button"
@@ -323,6 +417,16 @@ export default function Step2Splitter(props: Props) {
             </div>
           )}
 
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              margin: "2px 0 12px",
+            }}
+          >
+            {renderTransparentToggle()}
+          </div>
+
           <button
             type="button"
             className="v2-drop-zone"
@@ -355,7 +459,28 @@ export default function Step2Splitter(props: Props) {
         <section className="v2-split-left">
           <div className="v2-live-head">
             <span className="v2-live-title">分割プレビュー（クリックで拡大）</span>
-            <span className="v2-live-hint">右で線を微調整できます</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+              <span style={{ fontSize: 11, color: "var(--v2-muted)", fontWeight: 700 }}>背景:</span>
+              {LIVE_BGS.map((b) => (
+                <button
+                  key={b.key}
+                  type="button"
+                  title={`背景を${b.label}にする`}
+                  aria-label={`背景を${b.label}にする`}
+                  onClick={() => setLiveBg(b.key)}
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    background: b.swatch,
+                    border: liveBg === b.key ? "2px solid var(--v2-pink)" : "1.5px solid var(--v2-line)",
+                    boxShadow: liveBg === b.key ? "0 0 0 2px rgba(247,168,200,0.3)" : "none",
+                    padding: 0,
+                  }}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="v2-live-grid" style={gridStyle}>
@@ -364,6 +489,7 @@ export default function Step2Splitter(props: Props) {
                 key={i}
                 type="button"
                 className="v2-live-cell"
+                style={{ background: liveBgCss }}
                 onClick={() => setZoomCell(i)}
                 aria-label={`${i + 1}番目のセルを拡大`}
               >
@@ -425,6 +551,19 @@ export default function Step2Splitter(props: Props) {
               {renderGridSizeToggle("v2-gridsize-toggle-inline")}
             </div>
           )}
+
+          {/* 白背景の自動透過 */}
+          <div style={{
+            display: "flex",
+            justifyContent: "center",
+            background: "#faf7ff",
+            border: "1px dashed #d8c8f3",
+            borderRadius: 8,
+            padding: "9px 12px",
+            margin: "8px 0 4px",
+          }}>
+            {renderTransparentToggle()}
+          </div>
 
           {/* セル内余白の微調整 */}
           <div style={{
@@ -505,7 +644,7 @@ export default function Step2Splitter(props: Props) {
             if (e.target === e.currentTarget) setZoomCell(null);
           }}
         >
-          <div className="v2-cell-zoom-inner" onClick={(e) => e.stopPropagation()}>
+          <div className="v2-cell-zoom-inner" style={{ background: liveBgCss }} onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="v2-cell-zoom-close"

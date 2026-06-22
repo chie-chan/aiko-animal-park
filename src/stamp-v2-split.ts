@@ -122,6 +122,167 @@ export async function renderCellToSize(
   return canvasToBlob(canvas);
 }
 
+export interface TransparentOptions {
+  /** 背景候補とみなす最小の明るさ（max(R,G,B)）。0-255。既定 250（ほぼ純白だけ抜く） */
+  brightness?: number;
+  /** 背景候補とみなす最大の彩度（max-min）。これ以下なら無彩色＝背景候補。既定 8 */
+  satTol?: number;
+}
+
+/**
+ * 白背景を透過する（縁フラッドフィル方式）。
+ *
+ * 「白を全部消す」のではなく、「画像の縁から地続きで繋がった白だけ」を透明にする。
+ * これにより、目のハイライト・白いマグ・黒地の白文字など “内側の白” を残したまま
+ * 背景だけを抜ける。ベタ塗り背景＋はっきりした輪郭の絵（AIスタンプ等）と相性が良い。
+ *
+ * @returns 透過後のPNG dataURL（処理できない場合は元の src をそのまま返す）
+ */
+export async function makeImageTransparent(
+  src: string,
+  opts: TransparentOptions = {},
+): Promise<string> {
+  const brightMin = opts.brightness ?? 250;
+  const satTol = opts.satTol ?? 8;
+  const img = await loadImage(src);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return src;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src;
+  ctx.drawImage(img, 0, 0);
+
+  let imageData: ImageData;
+  try {
+    imageData = ctx.getImageData(0, 0, w, h);
+  } catch {
+    // CORS等で読めない場合は元画像を返す
+    return src;
+  }
+  const data = imageData.data;
+  const n = w * h;
+
+  // 背景候補（明るく無彩色 or 既に透明）
+  const cand = new Uint8Array(n);
+  for (let i = 0; i < n; i += 1) {
+    const o = i * 4;
+    if (data[o + 3] === 0) {
+      cand[i] = 1;
+      continue;
+    }
+    const r = data[o];
+    const g = data[o + 1];
+    const b = data[o + 2];
+    const mx = r > g ? (r > b ? r : b) : g > b ? g : b;
+    const mn = r < g ? (r < b ? r : b) : g < b ? g : b;
+    if (mx >= brightMin && mx - mn <= satTol) cand[i] = 1;
+  }
+
+  // 縁から繋がった背景候補だけをフラッドフィル（4近傍）
+  const visited = new Uint8Array(n);
+  const stack = new Int32Array(n);
+  let sp = 0;
+  const push = (idx: number) => {
+    if (idx >= 0 && idx < n && cand[idx] && !visited[idx]) {
+      visited[idx] = 1;
+      stack[sp] = idx;
+      sp += 1;
+    }
+  };
+  for (let x = 0; x < w; x += 1) {
+    push(x);
+    push((h - 1) * w + x);
+  }
+  for (let y = 0; y < h; y += 1) {
+    push(y * w);
+    push(y * w + (w - 1));
+  }
+  while (sp > 0) {
+    sp -= 1;
+    const idx = stack[sp];
+    const x = idx % w;
+    const y = (idx / w) | 0;
+    if (x > 0) push(idx - 1);
+    if (x < w - 1) push(idx + 1);
+    if (y > 0) push(idx - w);
+    if (y < h - 1) push(idx + w);
+  }
+
+  for (let i = 0; i < n; i += 1) {
+    if (visited[i]) data[i * 4 + 3] = 0;
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * セル画像の中身（不透明な被写体）を検出し、画像の中央に寄せた dataURL を返す。
+ * 透過済み画像が前提（アルファで中身の範囲を判定）。中身が画像いっぱい＝不透明な
+ * 画像では何もしない（元の src をそのまま返す）。
+ */
+export async function centerImageContent(
+  src: string,
+  alphaThreshold = 8,
+): Promise<string> {
+  const img = await loadImage(src);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return src;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src;
+  ctx.drawImage(img, 0, 0);
+
+  let data: ImageData;
+  try {
+    data = ctx.getImageData(0, 0, w, h);
+  } catch {
+    return src;
+  }
+  const a = data.data;
+
+  // 不透明ピクセルのバウンディングボックス
+  let x0 = w;
+  let y0 = h;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < h; y += 1) {
+    const row = y * w;
+    for (let x = 0; x < w; x += 1) {
+      if (a[(row + x) * 4 + 3] > alphaThreshold) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return src; // 中身なし
+
+  const cw = x1 - x0 + 1;
+  const ch = y1 - y0 + 1;
+  // 中央寄せに必要な平行移動量
+  const dx = Math.round((w - cw) / 2 - x0);
+  const dy = Math.round((h - ch) / 2 - y0);
+  if (dx === 0 && dy === 0) return src; // すでに中央
+
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  const octx = out.getContext("2d");
+  if (!octx) return src;
+  octx.clearRect(0, 0, w, h);
+  octx.drawImage(img, dx, dy);
+  return out.toDataURL("image/png");
+}
+
 /**
  * シート画像を gridRows × gridCols に分割。
  * verticalCuts.length === gridCols - 1、horizontalCuts.length === gridRows - 1 を期待。

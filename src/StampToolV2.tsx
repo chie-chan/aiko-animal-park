@@ -5,11 +5,11 @@ import FloatingMascot from "./FloatingMascot";
 import Step2Splitter from "./Step2Splitter";
 import Step2ReorderEdit from "./Step2ReorderEdit";
 import Step3Export from "./Step3Export";
-import { defaultCuts, type CellOffset, type GridSize, type SourceImage } from "./stamp-v2-split";
+import { centerImageContent, defaultCuts, type CellOffset, type GridSize, type SourceImage } from "./stamp-v2-split";
 
 const MASCOT_TIPS: Record<number, string[]> = {
   1: [
-    "まずは4×4の透過PNGをアップロードしてね！",
+    "まずは4×4の画像をアップロード！白い背景なら自動で透過するよ。",
     "右の紫線をドラッグすると、分割位置を微調整できるよ。",
     "セルをクリックすると、その1枚を大きく拡大できるよ。",
     "サンプル画像で試したいときは、上のボタンから！",
@@ -45,7 +45,7 @@ export type BgPreview = "checker" | "white" | "black" | "pink" | "blue";
 
 export default function StampToolV2() {
   const [step, setStep] = useState<StepId>(1);
-  const [gridSize, setGridSize] = useState<GridSize>(3);
+  const [gridSize, setGridSize] = useState<GridSize>(4);
 
   // ── デザインルーム（モーダル） ──────────────────────
   const [showDesignRoom, setShowDesignRoom] = useState<boolean>(false);
@@ -90,8 +90,8 @@ export default function StampToolV2() {
 
   // ── Step 1（Splitter）の state ─────────────────────
   const [sheetSrc, setSheetSrc] = useState<string | null>(null);
-  const [verticalCuts, setVerticalCuts] = useState<number[]>(() => defaultCuts(3));
-  const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(3));
+  const [verticalCuts, setVerticalCuts] = useState<number[]>(() => defaultCuts(4));
+  const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(4));
   const [splitCells, setSplitCells] = useState<SourceImage[]>([]);
 
   // グリッドサイズ切替時に分割線をその初期値に戻す（セル数が変わるため）
@@ -132,6 +132,26 @@ export default function StampToolV2() {
     step === 2 ? splitCells.length > 0 :
     false;
   const hasOpenOverlay = showStartSpotlight || showGuide || showNotice || showDesignRoom;
+
+  // 「次へ」：Step1から進むときに各セルの中身を自動で中央寄せしてから Step2 へ
+  const [centering, setCentering] = useState<boolean>(false);
+  async function handleNext() {
+    if (step === 1 && splitCells.length > 0) {
+      setCentering(true);
+      try {
+        const centered = await Promise.all(
+          splitCells.map(async (c) => ({ ...c, src: await centerImageContent(c.src) })),
+        );
+        setSplitCells(centered);
+        setCellOffsets({}); // 自動中央寄せ後は手動オフセットをリセット
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setCentering(false);
+      }
+    }
+    setStep((s) => Math.min(3, s + 1) as StepId);
+  }
 
   function openDesignRoomWithGuide() {
     setShowStartSpotlight(false);
@@ -283,7 +303,7 @@ export default function StampToolV2() {
           ← 戻る
         </button>
         <p className="v2-bottom-msg">
-          {step === 1 && "お持ちの透過ソフト（Canvaなど）で背景透過したPNGをアップロード → 16枚に自動分割"}
+          {step === 1 && "白背景の画像でもOK！アップロードすると白い背景を自動で透過 → セルに自動分割します（透過はON/OFF切替可）"}
           {step === 2 && "並び順をドラッグで入れ替え＆クリックで選んだセルの位置を微調整"}
           {step === 3 && "メイン/タブ画像を選んでZIPでダウンロード → LINE Creatorsへ"}
         </p>
@@ -294,10 +314,10 @@ export default function StampToolV2() {
           <button
             type="button"
             className="v2-btn-primary"
-            disabled={!canGoNext}
-            onClick={() => setStep((s) => Math.min(3, s + 1) as StepId)}
+            disabled={!canGoNext || centering}
+            onClick={handleNext}
           >
-            次へ →
+            {centering ? "中央寄せ中…" : "次へ →"}
           </button>
         ) : (
           <a
@@ -322,7 +342,7 @@ export default function StampToolV2() {
             <span>START</span>
             <strong>まずは「プロンプトを作る」から</strong>
             <p>
-              光っている「プロンプトを作る」を押して、デザインとペットの種類を選びます。画像ができたらこの画面に戻ってアップロード。透過はLINEスタンプメーカー（公式アプリ）が自動でやってくれます。
+              光っている「プロンプトを作る」を押して、デザインとペットの種類を選びます。画像ができたらこの画面に戻ってアップロード。白い背景はこの工房が自動で透過し、コマごとに分割します（透過はON/OFFで切替できます）。
             </p>
           </div>
         </div>
@@ -366,7 +386,7 @@ export default function StampToolV2() {
             <div className="v2-notice-body">
               <h4>このツールの位置づけ</h4>
               <p>
-                うちのこスタンプ工房は、AIで作った4×4画像を <strong>16枚のスタンプに分割・整形・ZIP化する</strong> 作業を便利にするためのツールです。画像を生成したり、透過処理したり、審査を代行するものではありません。
+                うちのこスタンプ工房は、AIで作った4×4画像を <strong>白背景の自動透過・16枚への分割・整形・ZIP化</strong> まで行うツールです。画像を生成したり、審査を代行したりするものではありません。
               </p>
 
               <h4>📝 LINE審査について</h4>
@@ -398,7 +418,10 @@ export default function StampToolV2() {
 
               <h4>🎨 透過処理について</h4>
               <p>
-                背景透過は Canva・Photoshop・remove.bg などお手持ちのソフトで行ってください。本ツールは透過処理は行いません。
+                Step1の「✨ 白い背景を自動で透過する」をONにすると、本ツールが<strong>白い背景を自動で透明化</strong>します（画像の縁から繋がった白だけを抜くので、目の白や白文字などの“内側の白”は残ります）。ベタ塗りの白背景＋はっきりした輪郭の絵で特にきれいに抜けます。
+              </p>
+              <p>
+                自動透過がうまくいかない場合や、より精密に仕上げたい場合は、Canva・Photoshop・remove.bg などお手持ちのソフトで透過した画像をアップロードしてください（トグルをOFFにすればそのまま使えます）。
               </p>
 
               <div className="v2-notice-disclaimer">
@@ -468,7 +491,7 @@ export default function StampToolV2() {
               />
               {designRoomGuideStep > 0 && (
                 <DesignRoomCoach
-                  step={designRoomGuideStep}
+                  step={designRoomGuideStep as Exclude<DesignRoomGuideStep, 0>}
                   onClose={() => setDesignRoomGuideStep(0)}
                   onNext={() =>
                     setDesignRoomGuideStep((current) =>
@@ -515,11 +538,11 @@ function StampGuideModal({ onClose, onOpenDesignRoom, onGoToUpload }: StampGuide
 
         <div className="v2-guide-body">
           <section className="v2-guide-lead">
-            <h3>流れは「作る → 分割する → 公式アプリで仕上げる」です</h3>
+            <h3>流れは「作る → 入れる（自動透過＆分割）→ 書き出す」です</h3>
             <p>
-              プロンプトで <strong>3×3=9コマ（または4×4=16コマ）</strong> のスタンプ画像を作り、この画面で分割・書き出し。
-              透過と販売申請は <strong>LINEスタンプメーカー（公式アプリ）</strong> がまとめてやってくれます。
-              PCで完結したい方は先にCanva等で透過してもOK。
+              プロンプトで <strong>3×3=9コマ（または4×4=16コマ）</strong> のスタンプ画像を作り、この画面にアップロード。
+              <strong>白い背景はこの工房が自動で透過</strong>し、コマごとに分割してZIPで書き出します。あとは <strong>LINE Creators Market（Web）</strong> に提出するだけ。
+              （スマホで作りたい方は <a href="/stamp-mobile">スマホ版</a> へ）
             </p>
           </section>
 
@@ -595,7 +618,7 @@ const DESIGN_ROOM_GUIDE_STEPS: Record<
   6: {
     kicker: "STEP 6",
     title: "画像ができたらアップロード",
-    body: "できた画像をこの画面に戻ってアップロード。透過は後でOK（LINEスタンプメーカー公式アプリが自動でやってくれます）。",
+    body: "できた画像をこの画面に戻ってアップロード。白い背景なら自動で透過＆分割されます。",
   },
 };
 
@@ -915,26 +938,26 @@ function DesignRoom(props: DesignRoomProps) {
 
         <div className={`v2-canva-box${guideStep === 6 ? " is-guide-target" : ""}`}>
           <div className="v2-canva-box-head">
-            <span className="v2-canva-box-title">📲 おすすめ：公式アプリで透過しよう</span>
+            <span className="v2-canva-box-title">✨ 画像ができたら、この工房で仕上げよう</span>
           </div>
           <p style={{ fontSize: 12.5, color: "var(--v2-ink)", margin: "2px 0 8px", lineHeight: 1.7 }}>
-            <strong>LINEスタンプメーカー（公式アプリ）</strong>には自動で背景を切り抜く機能があります。
-            透過ソフトを別途用意しなくても、画像をアップしたタイミングで公式アプリ側がきれいに透過してくれます。
+            AIで作った4×4画像を、そのままこの工房にアップロードするだけ。
+            <strong>白い背景は自動で透過</strong>し、コマごとに分割してZIPで書き出します。透過ソフトを別途用意する必要はありません。
           </p>
           <ol className="v2-canva-box-steps">
             <li>AIで生成した4×4画像をダウンロード</li>
-            <li>そのままこの画面にアップロード → 16枚に分割・書き出し</li>
-            <li>書き出した画像をスマホへ（AirDrop・自分宛にLINE送信など）</li>
-            <li><strong>LINEスタンプメーカー</strong>で各画像をアップ → 公式の機能で自動透過 → そのまま販売申請</li>
+            <li>この画面にアップロード → 白背景を自動で透過＆16枚に分割</li>
+            <li>位置を整えて、メイン画像・タブ画像を選ぶ</li>
+            <li>ZIPで書き出し → <strong>LINE Creators Market（Web）</strong>に提出</li>
           </ol>
           <div className="v2-canva-actions">
             <a
               className="v2-canva-link"
-              href="https://apps.apple.com/jp/app/line-creators-studio/id1063713656"
+              href="https://creator.line.me/ja/"
               target="_blank"
               rel="noopener noreferrer"
             >
-              📱 LINEスタンプメーカー（App Store）
+              🌐 LINE Creators Market
             </a>
             <button
               type="button"
@@ -945,7 +968,7 @@ function DesignRoom(props: DesignRoomProps) {
             </button>
           </div>
           <p style={{ fontSize: 11, color: "var(--v2-muted)", margin: "10px 0 0", lineHeight: 1.65 }}>
-            PCで完結したい方：先にCanva・Photoshop・remove.bg などで透過した画像をアップロードしてもOKです。その場合はそのままLINE Creators Market（Web）に提出できます。
+            スマホで作りたい方は <a href="/stamp-mobile">スマホ版</a> へ（スマホ版は <strong>LINEスタンプメーカー（公式アプリ）</strong> の切り抜き機能で透過します）。自動透過がうまくいかない時は、Canva・Photoshop・remove.bg などで透過した画像をアップしてもOK。
           </p>
         </div>
       </section>
