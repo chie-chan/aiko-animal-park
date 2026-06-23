@@ -523,10 +523,17 @@ export default function Step2Splitter(props: Props) {
     return (
       <div className="v2-split-room" style={{ gridTemplateColumns: "1fr" }}>
         <section className="v2-split-left">
-          <div className="v2-canva-reminder">
-            <strong>📷 スタンプ画像（白背景でもOK）</strong>をアップロードしてください。<br />
-            シート1枚を分割する方法と、完成済み画像を最大40枚まとめて取り込む方法を選べます。
-            下の「✨ 白い背景を自動で透過する」をONにすれば、白い背景はこのツールが自動で透明にします。
+          <div className="v2-canva-reminder v2-intake-head">
+            <div>
+              <strong>素材の入口を選ぶ</strong>
+              <span>シート分割と完成済み画像の一括取り込みを分けました。</span>
+            </div>
+            <div className="v2-intake-chips" aria-label="対応作業">
+              <span>1×1〜5×5</span>
+              <span>40枚一括</span>
+              <span>背景削除</span>
+              <span>LINE用ZIP</span>
+            </div>
           </div>
 
           {/* サンプル参考表示 */}
@@ -557,7 +564,7 @@ export default function Step2Splitter(props: Props) {
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 900, color: "var(--v2-ink)", marginBottom: 6 }}>
-                ← こんなグリッド状のスタンプ画像をアップロード（白背景でもOK）
+                シート画像を分割して使う場合
               </div>
               <p style={{ fontSize: 12, color: "var(--v2-muted)", lineHeight: 1.65, margin: "0 0 8px" }}>
                 AIで作った1×1〜5×5のスタンプシート画像をアップロードしてください。
@@ -589,7 +596,7 @@ export default function Step2Splitter(props: Props) {
           {/* グリッドサイズ選択 */}
           {onChangeGridSize && (
             <div className="v2-drop-gridsize-row">
-              <span className="v2-drop-gridsize-label">グリッドを選ぶ：</span>
+              <span className="v2-drop-gridsize-label">シート分割サイズ：</span>
               {renderGridSizeToggle("v2-gridsize-toggle-inline")}
               <span className="v2-drop-gridsize-hint">
                 1枚確認から25枚セットまで対応。スタンプは8/16/24/32/40枚、絵文字は8〜40枚の素材作りに使えます。
@@ -607,30 +614,44 @@ export default function Step2Splitter(props: Props) {
             {renderTransparentToggle()}
           </div>
 
-          <button
-            type="button"
-            className="v2-drop-zone"
-            onClick={() => fileInputRef.current?.click()}
-            onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files); }}
-            onDragOver={(e) => e.preventDefault()}
-          >
-            <span style={{ fontSize: 32 }}>📥</span>
-            <strong>スタンプ画像をアップロード</strong>
-            <span>選んだ {gridLabel} で自動分割します（PNG推奨）</span>
-          </button>
+          <div className="v2-intake-options">
+            <section className="v2-intake-option">
+              <div className="v2-intake-option-label">
+                <span>シートから作る</span>
+                <small>{gridLabel} を分割</small>
+              </div>
+              <button
+                type="button"
+                className="v2-drop-zone"
+                onClick={() => fileInputRef.current?.click()}
+                onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files); }}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                <span style={{ fontSize: 32 }}>📥</span>
+                <strong>シート画像をアップロード</strong>
+                <span>選んだ {gridLabel} でコマ分割します（PNG推奨）</span>
+              </button>
+            </section>
 
-          <button
-            type="button"
-            className="v2-drop-zone v2-batch-drop-zone"
-            onClick={() => batchFileInputRef.current?.click()}
-            onDrop={(e) => { e.preventDefault(); void handleBatchFiles(e.dataTransfer.files); }}
-            onDragOver={(e) => e.preventDefault()}
-            disabled={processing}
-          >
-            <span style={{ fontSize: 30 }}>🗂️</span>
-            <strong>完成済み画像を40枚まで一括取り込み</strong>
-            <span>1枚ずつ作った画像をまとめて背景透過し、並び替え・ZIP書き出しへ進めます</span>
-          </button>
+            <section className="v2-intake-option">
+              <div className="v2-intake-option-label">
+                <span>完成画像から作る</span>
+                <small>最大40枚</small>
+              </div>
+              <button
+                type="button"
+                className="v2-drop-zone v2-batch-drop-zone"
+                onClick={() => batchFileInputRef.current?.click()}
+                onDrop={(e) => { e.preventDefault(); void handleBatchFiles(e.dataTransfer.files); }}
+                onDragOver={(e) => e.preventDefault()}
+                disabled={processing}
+              >
+                <span style={{ fontSize: 30 }}>🗂️</span>
+                <strong>完成済み画像を一括取り込み</strong>
+                <span>1枚ずつ作った画像をまとめて整えます</span>
+              </button>
+            </section>
+          </div>
 
           {(batchProgress || (!sheetSrc && splitCells.length > 0)) && (
             <div className="v2-batch-result">
@@ -658,7 +679,7 @@ export default function Step2Splitter(props: Props) {
                   ))}
                 </div>
               )}
-              <p>取り込み後は下の「次へ」から、順番・位置・メイン/タブ選択へ進めます。</p>
+              <p>取り込み後は「画像を整える」へ進むと、順番・位置・メイン/タブ選択を確認できます。</p>
             </div>
           )}
 
@@ -695,7 +716,7 @@ export default function Step2Splitter(props: Props) {
         {/* LEFT: セルライブプレビュー（主役） */}
         <section className="v2-split-left">
           <div className="v2-live-head">
-            <span className="v2-live-title">分割プレビュー（クリックで拡大）</span>
+            <span className="v2-live-title">シート分割プレビュー（クリックで拡大）</span>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
               <span style={{ fontSize: 11, color: "var(--v2-muted)", fontWeight: 700 }}>背景:</span>
               {LIVE_BGS.map((b) => (
@@ -748,8 +769,8 @@ export default function Step2Splitter(props: Props) {
 
         {/* RIGHT: 分割線の微調整（サブ） */}
         <section className="v2-split-right">
-          <h4 className="v2-adjust-title">分割線の微調整</h4>
-          <p className="v2-adjust-sub">線をドラッグして、各セルの境界を合わせます。普通はそのままで大丈夫。</p>
+          <h4 className="v2-adjust-title">分割と背景の調整</h4>
+          <p className="v2-adjust-sub">境界線、背景削除、セル内の写り込みをここで整えます。普通はそのままで大丈夫。</p>
 
           <div
             ref={adjustPreviewRef}
@@ -929,7 +950,7 @@ export default function Step2Splitter(props: Props) {
 
           {splitCells.length > 0 && (
             <p style={{ fontSize: 11.5, color: "var(--v2-pink)", margin: "12px 0 0", fontWeight: 800, textAlign: "center" }}>
-              ✓ {cellCount}枚に分割済み（次のステップへ進めます）
+              ✓ {cellCount}枚に分割済み（画像を整えるへ進めます）
             </p>
           )}
           {message && (

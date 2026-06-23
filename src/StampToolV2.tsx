@@ -33,10 +33,10 @@ const MASCOT_TIPS: Record<number, string[]> = {
 };
 
 // ======================================================================
-// StampToolV2  ―  PC専用、3ステップ
-//   Step 1: 画像を入れる（取り込み・自動分割）
-//   Step 2: 位置調整・並び替え
-//   Step 3: 書き出し（メイン/タブ → ZIP）
+// StampToolV2  ―  PC専用、仕上げワークフロー
+//   1: 素材取り込み（シート分割 / 40枚一括）
+//   2: 画像調整（並び替え / 位置 / 背景確認）
+//   3: LINE用書き出し（スタンプ / 絵文字 / ZIP）
 //   ＋ デザインルーム（番号外、右上ボタンから呼び出し）
 // ======================================================================
 
@@ -170,8 +170,8 @@ export default function StampToolV2() {
       {/* ── 上部：タイトル＋ステップナビ＋ツールボタン ── */}
       <header className="v2-topbar">
         <div className="v2-topbar-title">
-          <span className="v2-topbar-kicker">UCHINOKO STAMP STUDIO</span>
-          <span className="v2-topbar-name">うちのこスタンプ工房</span>
+          <span className="v2-topbar-kicker">STAMP FINISHING SUITE</span>
+          <span className="v2-topbar-name">うちのこスタンプ仕上げ室</span>
         </div>
         <nav className="v2-stepnav" aria-label="ステップナビ">
           <button
@@ -180,7 +180,10 @@ export default function StampToolV2() {
             onClick={() => setStep(1)}
           >
             <span className="v2-stepnum">1</span>
-            画像を入れる
+            <span className="v2-steptext">
+              <span className="v2-steplabel">素材を取り込む</span>
+              <span className="v2-stepsub">シート分割 / 40枚一括</span>
+            </span>
           </button>
           <button
             type="button"
@@ -189,7 +192,10 @@ export default function StampToolV2() {
             disabled={splitCells.length === 0}
           >
             <span className="v2-stepnum">2</span>
-            位置調整・並び替え
+            <span className="v2-steptext">
+              <span className="v2-steplabel">画像を整える</span>
+              <span className="v2-stepsub">順番 / 位置 / 背景確認</span>
+            </span>
           </button>
           <button
             type="button"
@@ -198,7 +204,10 @@ export default function StampToolV2() {
             disabled={splitCells.length === 0}
           >
             <span className="v2-stepnum">3</span>
-            書き出し
+            <span className="v2-steptext">
+              <span className="v2-steplabel">LINE用ZIP</span>
+              <span className="v2-stepsub">スタンプ / 絵文字</span>
+            </span>
           </button>
         </nav>
         <div className="v2-topbar-spacer" />
@@ -304,9 +313,9 @@ export default function StampToolV2() {
           ← 戻る
         </button>
         <p className="v2-bottom-msg">
-          {step === 1 && "シート画像は自動分割、完成済み画像は40枚まで一括取り込みできます（透過はON/OFF切替可）"}
-          {step === 2 && "並び順をドラッグで入れ替え＆クリックで選んだセルの位置を微調整"}
-          {step === 3 && "メイン/タブ画像を選んでZIPでダウンロード → LINE Creatorsへ"}
+          {step === 1 && "入口を選んで素材を取り込みます。シート分割、完成済み画像40枚一括、背景削除をここで扱います。"}
+          {step === 2 && "申請前の見え方を整えます。順番、位置、背景プレビューを確認できます。"}
+          {step === 3 && "用途を選んで透過PNGのZIPを書き出します。スタンプ用と絵文字用を切り替えできます。"}
         </p>
         <span className="v2-bottom-disclaimer">
           ※LINE審査の通過を保証するものではありません <a onClick={() => setShowNotice(true)}>詳しく</a>
@@ -318,7 +327,7 @@ export default function StampToolV2() {
             disabled={!canGoNext || centering}
             onClick={handleNext}
           >
-            {centering ? "中央寄せ中…" : "次へ →"}
+            {centering ? "中央寄せ中…" : step === 1 ? "画像を整える →" : "LINE用ZIPへ →"}
           </button>
         ) : (
           <a
@@ -530,7 +539,7 @@ function StampGuideModal({ onClose, onOpenDesignRoom, onGoToUpload }: StampGuide
         <div className="v2-guide-bar">
           <div>
             <span>GUIDE ・ 💻 PC版</span>
-            <strong>スタンプ工房の使い方</strong>
+            <strong>スタンプ仕上げ室の使い方</strong>
           </div>
           <button type="button" className="v2-designroom-modal-close" onClick={onClose} aria-label="閉じる">
             ×
@@ -539,13 +548,33 @@ function StampGuideModal({ onClose, onOpenDesignRoom, onGoToUpload }: StampGuide
 
         <div className="v2-guide-body">
           <section className="v2-guide-lead">
-            <h3>流れは「作る → 入れる（自動透過＆分割）→ 書き出す」です</h3>
+            <h3>素材作りと申請前の仕上げを分けて使います</h3>
             <p>
               プロンプトで <strong>1×1〜5×5</strong> のスタンプ画像を作るか、完成済み画像を最大40枚まとめてアップロード。
               <strong>背景はこの工房で自動削除・色指定削除・消しゴム修正</strong>し、コマごとに整えてZIPで書き出します。あとは <strong>LINE Creators Market（Web）</strong> に提出するだけ。
               （スマホで作りたい方は <a href="/stamp-mobile">スマホ版</a> へ）
             </p>
           </section>
+
+          <div className="v2-guide-flow" aria-label="仕上げ室の作業区分">
+            <section className="v2-guide-flow-card outside">
+              <span className="v2-guide-badge">準備</span>
+              <b>プロンプトで素材を作る</b>
+              <p>デザイン・種類・特徴を入れて、1×1〜5×5の素材画像を作ります。</p>
+            </section>
+            <div className="v2-guide-arrow">→</div>
+            <section className="v2-guide-flow-card inside">
+              <span className="v2-guide-badge">編集</span>
+              <b>背景と並びを整える</b>
+              <p>シート分割、40枚一括、背景削除、位置調整をまとめて行います。</p>
+            </section>
+            <div className="v2-guide-arrow">→</div>
+            <section className="v2-guide-flow-card inside">
+              <span className="v2-guide-badge">提出</span>
+              <b>LINE用ZIPを書き出す</b>
+              <p>スタンプ・絵文字のサイズを選び、main.png / tab.pngも一緒に出します。</p>
+            </section>
+          </div>
 
           <div className="v2-guide-poster-list" aria-label="うちのこスタンプ工房の使い方ガイド">
             <figure className="v2-guide-poster">
@@ -576,7 +605,7 @@ function StampGuideModal({ onClose, onOpenDesignRoom, onGoToUpload }: StampGuide
             プロンプトを作る
           </button>
           <button type="button" className="v2-guide-primary" onClick={onGoToUpload}>
-            画像を入れるへ
+            素材を取り込むへ
           </button>
         </div>
       </div>

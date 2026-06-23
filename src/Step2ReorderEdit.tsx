@@ -149,7 +149,7 @@ export default function Step2ReorderEdit(props: Props) {
       <div className="v2-placeholder">
         <div className="v2-placeholder-card">
           <h3>📥 まだ画像がありません</h3>
-          <p>Step 1 で{gridSize}×{gridSize}画像を取り込んでから戻ってきてください。</p>
+          <p>「素材を取り込む」で{gridSize}×{gridSize}画像、または完成済み画像を読み込んでから戻ってきてください。</p>
         </div>
       </div>
     );
@@ -162,8 +162,8 @@ export default function Step2ReorderEdit(props: Props) {
       {/* LEFT: 並び順 + 選択 */}
       <section className="v2-export-left">
         <div className="v2-export-head">
-          <span className="v2-export-title">並び順 / セル選択</span>
-          <span className="v2-export-sub">ドラッグで並び替え／クリックで選択</span>
+          <span className="v2-export-title">画像を整える</span>
+          <span className="v2-export-sub">ドラッグで並び替え／クリックで位置調整対象を選択</span>
         </div>
 
         <div className="v2-reorder-grid" style={gridStyle}>
@@ -205,7 +205,7 @@ export default function Step2ReorderEdit(props: Props) {
       <section className="v2-export-right">
         <div className="v2-edit-card" style={{ marginBottom: 0 }}>
           <div className="v2-edit-card-title">
-            <span>位置を微調整 <strong style={{ color: "#c25b1f" }}>{safeSelectedIndex + 1}番</strong></span>
+            <span>選択画像の位置 <strong style={{ color: "#c25b1f" }}>{safeSelectedIndex + 1}番</strong></span>
             <div className="v2-bg-picker" role="group" aria-label="背景色プレビュー">
               <span className="v2-bg-picker-label">背景</span>
               {BG_OPTIONS.map((opt) => (

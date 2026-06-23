@@ -191,7 +191,7 @@ export default function Step3Export(props: Props) {
       <div className="v2-placeholder">
         <div className="v2-placeholder-card">
           <h3>まだ画像がありません</h3>
-          <p>Step 1 で{gridSize}×{gridSize}画像を取り込み、{gridSize * gridSize}枚に分割してから戻ってきてください。</p>
+          <p>「素材を取り込む」で{gridSize}×{gridSize}画像を分割、または完成済み画像を一括取り込みしてから戻ってきてください。</p>
         </div>
       </div>
     );
@@ -207,7 +207,7 @@ export default function Step3Export(props: Props) {
     <div className="v2-export-room">
       <section className="v2-export-left">
         <div className="v2-export-head">
-          <span className="v2-export-title">画像一覧（最終確認）</span>
+          <span className="v2-export-title">LINE提出用の最終確認</span>
           <span className="v2-export-sub">
             {preset.bodyLabel} {preset.width}×{preset.height}
             {preset.includeMain && " / M = メイン画像"}
@@ -236,7 +236,7 @@ export default function Step3Export(props: Props) {
 
       <section className="v2-export-right">
         <div className="v2-export-preset-card">
-          <span className="v2-export-preset-label">書き出しサイズ</span>
+          <span className="v2-export-preset-label">用途を選ぶ</span>
           <div className="v2-export-preset-grid">
             {EXPORT_PRESETS.map((item) => (
               <button
