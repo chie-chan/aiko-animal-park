@@ -288,7 +288,8 @@ export async function pickImageColor(
   try {
     const x = clamp(Math.round(xRatio * (w - 1)), 0, w - 1);
     const y = clamp(Math.round(yRatio * (h - 1)), 0, h - 1);
-    const [r, g, b] = ctx.getImageData(x, y, 1, 1).data;
+    const [r, g, b, a] = ctx.getImageData(x, y, 1, 1).data;
+    if (a === 0) return null;
     return { r, g, b };
   } catch {
     return null;

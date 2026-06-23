@@ -448,7 +448,15 @@ export default function Step2Splitter(props: Props) {
       for (let i = 0; i < splitCells.length; i += 1) {
         setBatchProgress(`${i + 1} / ${splitCells.length} 枚を透過中…`);
         const cell = splitCells[i];
-        next.push({ ...cell, src: await makeImageTransparent(cell.src) });
+        const bgColor =
+          (await pickImageColor(cell.src, 0, 0)) ??
+          (await pickImageColor(cell.src, 1, 0)) ??
+          (await pickImageColor(cell.src, 0, 1)) ??
+          (await pickImageColor(cell.src, 1, 1));
+        const src = bgColor
+          ? await makeImageTransparent(cell.src, { targetColor: bgColor, tolerance: Math.max(bgTolerance, 32) })
+          : await makeImageTransparent(cell.src);
+        next.push({ ...cell, src });
       }
       setSplitCells(next);
       setBatchProgress("");
@@ -580,7 +588,7 @@ export default function Step2Splitter(props: Props) {
         <section className="v2-export-right v2-stage-toolbar">
           <h4 className="v2-adjust-title">背景透過</h4>
           <p className="v2-adjust-sub">
-            完成画像をまとめて取り込んだ場合は、ここで40枚まで一括で白背景を透過できます。
+            完成画像をまとめて取り込んだ場合は、各画像の端にある背景色を拾って40枚まで一括で透過できます。
           </p>
           <button
             type="button"
@@ -588,7 +596,7 @@ export default function Step2Splitter(props: Props) {
             disabled={processing || splitCells.length === 0}
             onClick={() => void runBatchTransparency()}
           >
-            {processing ? "透過中…" : "40枚を一括透過"}
+            {processing ? "透過中…" : "背景を一括透過"}
           </button>
           {batchProgress && <p className="v2-toolbar-note">{batchProgress}</p>}
           {message && <p className="v2-toolbar-note">{message}</p>}
