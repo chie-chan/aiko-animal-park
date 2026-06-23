@@ -1489,6 +1489,20 @@
   border: 1.5px solid var(--v2-line-soft);
   background: repeating-conic-gradient(#f4ebf3 0deg 90deg, #fff 90deg 180deg) 0 0 / 10px 10px;
 }
+.v2-batch-edit-cell {
+  display: block;
+  width: 100%;
+  padding: 0;
+  cursor: zoom-in;
+  transition: transform .14s, border-color .14s, box-shadow .14s;
+}
+.v2-batch-edit-cell:hover,
+.v2-batch-edit-cell:focus-visible {
+  border-color: var(--v2-pink);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(241, 95, 155, .18);
+  outline: none;
+}
 .v2-batch-preview-cell img {
   width: 100%;
   height: 100%;
@@ -1508,6 +1522,25 @@
   font-weight: 900;
   display: grid;
   place-items: center;
+}
+.v2-batch-preview-cell b {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  z-index: 1;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(45, 35, 64, .72);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .14s;
+}
+.v2-batch-edit-cell:hover b,
+.v2-batch-edit-cell:focus-visible b {
+  opacity: 1;
 }
 .v2-batch-result p {
   margin: 8px 0 0;
@@ -1733,6 +1766,12 @@
   font-size: 12px;
   font-weight: 900;
   margin-bottom: 8px;
+}
+.v2-batch-tool-head {
+  margin-bottom: 4px;
+}
+.v2-batch-tool-head .v2-adjust-title {
+  margin: 0;
 }
 .v2-picked-color {
   width: 22px;

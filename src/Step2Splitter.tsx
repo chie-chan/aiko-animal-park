@@ -163,6 +163,8 @@ export default function Step2Splitter(props: Props) {
   const liveGridRef = useRef<HTMLDivElement>(null);
   const adjustPreviewRef = useRef<HTMLDivElement>(null);
   const dragBoundsRef = useRef<HTMLElement | null>(null);
+  const splitCellsRef = useRef<SourceImage[]>(splitCells);
+  const batchEditIndexRef = useRef<number | null>(null);
   const eraseSourceRef = useRef<string | null>(null);
   const eraseQueueRef = useRef<EraseStroke[]>([]);
   const eraseBusyRef = useRef(false);
@@ -170,6 +172,7 @@ export default function Step2Splitter(props: Props) {
   const [erasing, setErasing] = useState(false);
   const [zoomCell, setZoomCell] = useState<number | null>(null);
   const [bgEditZoomOpen, setBgEditZoomOpen] = useState(false);
+  const [batchEditIndex, setBatchEditIndex] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [batchProgress, setBatchProgress] = useState("");
   const [trimGutter, setTrimGutter] = useState<number>(0);
@@ -187,8 +190,58 @@ export default function Step2Splitter(props: Props) {
   const liveBgCss = (LIVE_BGS.find((b) => b.key === liveBg) ?? LIVE_BGS[0]).css;
 
   useEffect(() => {
-    eraseSourceRef.current = sheetSrc;
-  }, [sheetSrc]);
+    splitCellsRef.current = splitCells;
+  }, [splitCells]);
+
+  useEffect(() => {
+    batchEditIndexRef.current = batchEditIndex;
+  }, [batchEditIndex]);
+
+  useEffect(() => {
+    const activeBatchCell = batchEditIndex === null ? null : splitCells[batchEditIndex] ?? null;
+    eraseSourceRef.current = activeBatchCell?.src ?? sheetSrc;
+  }, [sheetSrc, splitCells, batchEditIndex]);
+
+  function replaceBatchCellSrc(index: number, src: string) {
+    const next = splitCellsRef.current.map((cell, cellIndex) =>
+      cellIndex === index ? { ...cell, src } : cell,
+    );
+    splitCellsRef.current = next;
+    setSplitCells(next);
+  }
+
+  function getActiveEditSource() {
+    const index = batchEditIndexRef.current;
+    if (index !== null) return splitCellsRef.current[index]?.src ?? null;
+    return sheetSrc;
+  }
+
+  function getAutoTransparencySource() {
+    const index = batchEditIndexRef.current;
+    if (index !== null) return splitCellsRef.current[index]?.src ?? null;
+    return rawSrc ?? sheetSrc;
+  }
+
+  function setActiveEditSource(src: string) {
+    const index = batchEditIndexRef.current;
+    if (index !== null) {
+      replaceBatchCellSrc(index, src);
+    } else {
+      setSheetSrc(src);
+    }
+    eraseSourceRef.current = src;
+  }
+
+  async function makeEdgeBackgroundTransparent(src: string) {
+    const bgColor =
+      (await pickImageColor(src, 0, 0)) ??
+      (await pickImageColor(src, 1, 0)) ??
+      (await pickImageColor(src, 0, 1)) ??
+      (await pickImageColor(src, 1, 1));
+    return bgColor
+      ? makeImageTransparent(src, { targetColor: bgColor, tolerance: Math.max(bgTolerance, 32) })
+      : makeImageTransparent(src);
+  }
 
   // 取り込み時は元画像のまま sheetSrc にセットする。背景透過はStep3で行う。
   async function applyUploadedSrc(url: string) {
@@ -221,14 +274,17 @@ export default function Step2Splitter(props: Props) {
     }
   }
 
-  async function runAutoTransparency(source = rawSrc ?? sheetSrc) {
+  async function runAutoTransparency(source = getAutoTransparencySource()) {
     if (!source) return;
-    setBgTransparent(true);
+    const editingBatch = batchEditIndexRef.current !== null;
+    if (!editingBatch) setBgTransparent(true);
     setProcessing(true);
     setMessage("背景を透過しています…");
     try {
-      const out = await makeImageTransparent(source);
-      setSheetSrc(out);
+      const out = editingBatch
+        ? await makeEdgeBackgroundTransparent(source)
+        : await makeImageTransparent(source);
+      setActiveEditSource(out);
       setMessage("");
     } catch (err) {
       console.error(err);
@@ -238,9 +294,10 @@ export default function Step2Splitter(props: Props) {
     }
   }
 
-  async function runColorTransparency(color = pickedColor, source = rawSrc ?? sheetSrc) {
+  async function runColorTransparency(color = pickedColor, source = getActiveEditSource()) {
     if (!source || !color) return;
-    setBgTransparent(true);
+    const editingBatch = batchEditIndexRef.current !== null;
+    if (!editingBatch) setBgTransparent(true);
     setProcessing(true);
     setMessage("選んだ色の背景を透過しています…");
     try {
@@ -248,7 +305,7 @@ export default function Step2Splitter(props: Props) {
         targetColor: color,
         tolerance: bgTolerance,
       });
-      setSheetSrc(out);
+      setActiveEditSource(out);
       setMessage("");
     } catch (err) {
       console.error(err);
@@ -269,7 +326,7 @@ export default function Step2Splitter(props: Props) {
 
   async function pickAndRemoveColor(event: React.PointerEvent) {
     const point = pointFromPreview(event);
-    const source = rawSrc ?? sheetSrc;
+    const source = getActiveEditSource();
     if (!point || !source || processing) return;
     const color = await pickImageColor(source, point.x, point.y);
     if (!color) {
@@ -289,7 +346,9 @@ export default function Step2Splitter(props: Props) {
     try {
       const out = await eraseImageAtPoints(source, strokes);
       eraseSourceRef.current = out;
-      setSheetSrc(out);
+      const index = batchEditIndexRef.current;
+      if (index !== null) replaceBatchCellSrc(index, out);
+      else setSheetSrc(out);
     } catch (err) {
       console.error(err);
       setMessage("消しゴム処理に失敗しました。");
@@ -301,7 +360,7 @@ export default function Step2Splitter(props: Props) {
 
   function queueErase(event: React.PointerEvent) {
     const point = pointFromPreview(event);
-    if (!point || !sheetSrc) return;
+    if (!point || !getActiveEditSource()) return;
     eraseQueueRef.current.push({
       x: point.x,
       y: point.y,
@@ -448,14 +507,7 @@ export default function Step2Splitter(props: Props) {
       for (let i = 0; i < splitCells.length; i += 1) {
         setBatchProgress(`${i + 1} / ${splitCells.length} 枚を透過中…`);
         const cell = splitCells[i];
-        const bgColor =
-          (await pickImageColor(cell.src, 0, 0)) ??
-          (await pickImageColor(cell.src, 1, 0)) ??
-          (await pickImageColor(cell.src, 0, 1)) ??
-          (await pickImageColor(cell.src, 1, 1));
-        const src = bgColor
-          ? await makeImageTransparent(cell.src, { targetColor: bgColor, tolerance: Math.max(bgTolerance, 32) })
-          : await makeImageTransparent(cell.src);
+        const src = await makeEdgeBackgroundTransparent(cell.src);
         next.push({ ...cell, src });
       }
       setSplitCells(next);
@@ -464,6 +516,35 @@ export default function Step2Splitter(props: Props) {
     } catch (err) {
       console.error(err);
       setMessage("一括背景透過に失敗しました。画像を確認してください。");
+    } finally {
+      setProcessing(false);
+      setBatchProgress("");
+    }
+  }
+
+  async function runBatchColorTransparency(color = pickedColor) {
+    if (!splitCells.length || !color || processing) return;
+    setProcessing(true);
+    setBatchProgress(`0 / ${splitCells.length} 枚を色指定で透過中…`);
+    setMessage("");
+    try {
+      const next: SourceImage[] = [];
+      for (let i = 0; i < splitCells.length; i += 1) {
+        setBatchProgress(`${i + 1} / ${splitCells.length} 枚を色指定で透過中…`);
+        const cell = splitCells[i];
+        const src = await makeImageTransparent(cell.src, {
+          targetColor: color,
+          tolerance: bgTolerance,
+        });
+        next.push({ ...cell, src });
+      }
+      splitCellsRef.current = next;
+      setSplitCells(next);
+      setBatchProgress("");
+      setMessage(`${next.length}枚に選んだ色の透過を適用しました。`);
+    } catch (err) {
+      console.error(err);
+      setMessage("色指定の一括透過に失敗しました。許容値を変えてもう一度試してください。");
     } finally {
       setProcessing(false);
       setBatchProgress("");
@@ -534,7 +615,7 @@ export default function Step2Splitter(props: Props) {
     if (erasing) {
       setErasing(false);
       const latest = eraseSourceRef.current ?? sheetSrc;
-      if (latest) regenerateCells(latest);
+      if (latest && batchEditIndexRef.current === null) regenerateCells(latest);
     }
     stopDrag();
   }
@@ -548,7 +629,7 @@ export default function Step2Splitter(props: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (bgEditZoomOpen && e.key === "Escape") {
-        setBgEditZoomOpen(false);
+        closeBgEditor();
         return;
       }
       if (zoomCell === null) return;
@@ -565,6 +646,8 @@ export default function Step2Splitter(props: Props) {
   const hLines = safeCuts(horizontalCuts, gridRows).map((c) => linePosition(c, OUTER_PADDING));
 
   const gridLabel = `${gridCols}×${gridRows}`;
+  const batchEditCell = batchEditIndex === null ? null : splitCells[batchEditIndex] ?? null;
+  const bgEditorSrc = batchEditCell?.src ?? sheetSrc;
   function renderBgToolTabLabel(key: BgTool, label: string) {
     return (
       <span className={`v2-bg-tool-label is-${key}`}>
@@ -574,42 +657,275 @@ export default function Step2Splitter(props: Props) {
     );
   }
 
+  function openBatchEditor(index: number) {
+    const cell = splitCells[index];
+    if (!cell) return;
+    batchEditIndexRef.current = index;
+    setBatchEditIndex(index);
+    eraseSourceRef.current = cell.src;
+    setBgEditZoomOpen(true);
+  }
+
+  function closeBgEditor() {
+    setBgEditZoomOpen(false);
+    setErasing(false);
+    if (batchEditIndexRef.current !== null) {
+      batchEditIndexRef.current = null;
+      setBatchEditIndex(null);
+      eraseSourceRef.current = sheetSrc;
+    }
+  }
+
+  function renderBgEditorModal(src: string) {
+    const editingBatch = batchEditIndex !== null;
+    return (
+      <div
+        className="v2-bg-zoom-overlay"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) closeBgEditor();
+        }}
+      >
+        <div className="v2-bg-zoom-modal" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            className="v2-bg-zoom-close"
+            onClick={closeBgEditor}
+            aria-label="背景透過の拡大編集を閉じる"
+          >
+            ×
+          </button>
+
+          <div
+            ref={adjustPreviewRef}
+            className={`v2-bg-zoom-canvas${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
+            onPointerDown={handlePreviewPointerDown}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={handlePreviewPointerUp}
+            onPointerCancel={handlePreviewPointerUp}
+          >
+            <img src={src} alt="" draggable={false} />
+            <span className="v2-bg-zoom-hint">
+              {bgTool === "color"
+                ? "消したい背景色をクリック"
+                : bgTool === "eraser"
+                  ? "消したい部分をドラッグ"
+                  : "自動透過は右のボタンから実行"}
+            </span>
+          </div>
+
+          <aside className="v2-bg-zoom-tools">
+            <div className="v2-bg-tool-head">
+              <span>{editingBatch ? `${(batchEditIndex ?? 0) + 1}枚目を編集` : "背景透過"}</span>
+              {pickedColor && (
+                <span
+                  className="v2-picked-color"
+                  title={`RGB(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})`}
+                  style={{ background: `rgb(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})` }}
+                />
+              )}
+            </div>
+            <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
+              {([
+                ["auto", "自動"],
+                ["color", "色クリック"],
+                ["eraser", "消しゴム"],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={bgTool === key ? "is-active" : ""}
+                  onClick={() => setBgTool(key)}
+                >
+                  {renderBgToolTabLabel(key, label)}
+                </button>
+              ))}
+            </div>
+
+            {bgTool === "auto" && (
+              <div className="v2-bg-tool-body">
+                {!editingBatch && renderTransparentToggle()}
+                <button
+                  type="button"
+                  className="v2-bg-tool-action"
+                  disabled={processing || !src}
+                  onClick={() => void runAutoTransparency()}
+                >
+                  自動透過を実行
+                </button>
+                <p>{editingBatch ? "この画像の端にある背景色を拾って透明にします。" : "白や薄い背景が外側につながっている画像向きです。"}</p>
+              </div>
+            )}
+
+            {bgTool === "color" && (
+              <div className="v2-bg-tool-body">
+                <label className="v2-bg-slider">
+                  <span>許容値 <strong>{bgTolerance}</strong></span>
+                  <input
+                    type="range"
+                    min={4}
+                    max={90}
+                    step={1}
+                    value={bgTolerance}
+                    onChange={(e) => setBgTolerance(Number(e.target.value))}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="v2-bg-tool-action"
+                  disabled={processing || !pickedColor}
+                  onClick={() => void runColorTransparency()}
+                >
+                  この色でもう一度削除
+                </button>
+                <p>大きい画像上で消したい背景色をクリックします。</p>
+              </div>
+            )}
+
+            {bgTool === "eraser" && (
+              <div className="v2-bg-tool-body">
+                <label className="v2-bg-slider">
+                  <span>ブラシ <strong>{eraseRadius}px</strong></span>
+                  <input
+                    type="range"
+                    min={4}
+                    max={80}
+                    step={1}
+                    value={eraseRadius}
+                    onChange={(e) => setEraseRadius(Number(e.target.value))}
+                  />
+                </label>
+                <p>大きい画像上をドラッグすると、その部分だけ透明になります。</p>
+              </div>
+            )}
+
+            {message && <p className="v2-toolbar-note">{message}</p>}
+            <p className="v2-bg-zoom-foot">ESCまたは外側クリックで閉じます。</p>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
   // ── 描画 ──────────────────────────────────────────────
   if (phase === "background" && !sheetSrc && splitCells.length > 0) {
     return (
-      <div className="v2-export-room v2-batch-background-room">
-        <section className="v2-export-left">
-          <div className="v2-export-head">
-            <span className="v2-export-title">背景透過プレビュー</span>
-            <span className="v2-export-sub">40枚一括取り込み</span>
-          </div>
-          <div className="v2-batch-preview-grid v2-batch-background-grid">
-            {splitCells.slice(0, 40).map((cell, index) => (
-              <div key={cell.id} className="v2-batch-preview-cell">
-                <img src={cell.src} alt="" />
-                <span>{index + 1}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+      <>
+        <div className="v2-export-room v2-batch-background-room">
+          <section className="v2-export-left">
+            <div className="v2-export-head">
+              <span className="v2-export-title">背景透過プレビュー</span>
+              <span className="v2-export-sub">画像をクリックして拡大編集</span>
+            </div>
+            <div className="v2-batch-preview-grid v2-batch-background-grid">
+              {splitCells.slice(0, 40).map((cell, index) => (
+                <button
+                  key={cell.id}
+                  type="button"
+                  className="v2-batch-preview-cell v2-batch-edit-cell"
+                  onClick={() => openBatchEditor(index)}
+                  aria-label={`${index + 1}枚目を拡大して背景を編集`}
+                >
+                  <img src={cell.src} alt="" />
+                  <span>{index + 1}</span>
+                  <b>編集</b>
+                </button>
+              ))}
+            </div>
+          </section>
 
-        <section className="v2-export-right v2-stage-toolbar">
-          <h4 className="v2-adjust-title">背景透過</h4>
-          <p className="v2-adjust-sub">
-            完成画像をまとめて取り込んだ場合は、各画像の端にある背景色を拾って40枚まで一括で透過できます。
-          </p>
-          <button
-            type="button"
-            className="v2-bg-tool-action"
-            disabled={processing || splitCells.length === 0}
-            onClick={() => void runBatchTransparency()}
-          >
-            {processing ? "透過中…" : "背景を一括透過"}
-          </button>
-          {batchProgress && <p className="v2-toolbar-note">{batchProgress}</p>}
-          {message && <p className="v2-toolbar-note">{message}</p>}
-        </section>
-      </div>
+          <section className="v2-export-right v2-stage-toolbar">
+            <div className="v2-bg-tool-head v2-batch-tool-head">
+              <h4 className="v2-adjust-title">背景透過</h4>
+              {pickedColor && (
+                <span
+                  className="v2-picked-color"
+                  title={`RGB(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})`}
+                  style={{ background: `rgb(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})` }}
+                />
+              )}
+            </div>
+            <p className="v2-adjust-sub">
+              自動は各画像の端の背景色を拾って一括透過します。色クリック・消しゴムは左の画像を開いて調整できます。
+            </p>
+            <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
+              {([
+                ["auto", "自動"],
+                ["color", "色クリック"],
+                ["eraser", "消しゴム"],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={bgTool === key ? "is-active" : ""}
+                  onClick={() => setBgTool(key)}
+                >
+                  {renderBgToolTabLabel(key, label)}
+                </button>
+              ))}
+            </div>
+
+            {bgTool === "auto" && (
+              <div className="v2-bg-tool-body">
+                <button
+                  type="button"
+                  className="v2-bg-tool-action"
+                  disabled={processing || splitCells.length === 0}
+                  onClick={() => void runBatchTransparency()}
+                >
+                  {processing ? "透過中…" : "端の背景色で一括透過"}
+                </button>
+                <p>黒・白など、背景が画像の端につながっている完成画像向きです。</p>
+              </div>
+            )}
+
+            {bgTool === "color" && (
+              <div className="v2-bg-tool-body">
+                <label className="v2-bg-slider">
+                  <span>許容値 <strong>{bgTolerance}</strong></span>
+                  <input
+                    type="range"
+                    min={4}
+                    max={90}
+                    step={1}
+                    value={bgTolerance}
+                    onChange={(e) => setBgTolerance(Number(e.target.value))}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="v2-bg-tool-action"
+                  disabled={processing || !pickedColor}
+                  onClick={() => void runBatchColorTransparency()}
+                >
+                  選んだ色を全画像に適用
+                </button>
+                <p>まず左の画像を開いて、消したい色をスポイトでクリックします。</p>
+              </div>
+            )}
+
+            {bgTool === "eraser" && (
+              <div className="v2-bg-tool-body">
+                <label className="v2-bg-slider">
+                  <span>ブラシ <strong>{eraseRadius}px</strong></span>
+                  <input
+                    type="range"
+                    min={4}
+                    max={80}
+                    step={1}
+                    value={eraseRadius}
+                    onChange={(e) => setEraseRadius(Number(e.target.value))}
+                  />
+                </label>
+                <p>左の画像をクリックして拡大し、消したい部分をドラッグします。</p>
+              </div>
+            )}
+
+            {batchProgress && <p className="v2-toolbar-note">{batchProgress}</p>}
+            {message && <p className="v2-toolbar-note">{message}</p>}
+          </section>
+        </div>
+        {bgEditZoomOpen && bgEditorSrc && renderBgEditorModal(bgEditorSrc)}
+      </>
     );
   }
 
@@ -1034,132 +1350,7 @@ export default function Step2Splitter(props: Props) {
         </section>
       </div>
 
-      {bgEditZoomOpen && sheetSrc && (
-        <div
-          className="v2-bg-zoom-overlay"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setBgEditZoomOpen(false);
-          }}
-        >
-          <div className="v2-bg-zoom-modal" onClick={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              className="v2-bg-zoom-close"
-              onClick={() => setBgEditZoomOpen(false)}
-              aria-label="背景透過の拡大編集を閉じる"
-            >
-              ×
-            </button>
-
-            <div
-              ref={adjustPreviewRef}
-              className={`v2-bg-zoom-canvas${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
-              onPointerDown={handlePreviewPointerDown}
-              onPointerMove={handlePreviewPointerMove}
-              onPointerUp={handlePreviewPointerUp}
-              onPointerCancel={handlePreviewPointerUp}
-            >
-              <img src={sheetSrc} alt="" draggable={false} />
-              <span className="v2-bg-zoom-hint">
-                {bgTool === "color"
-                  ? "消したい背景色をクリック"
-                  : bgTool === "eraser"
-                    ? "消したい部分をドラッグ"
-                    : "自動透過は右のボタンから実行"}
-              </span>
-            </div>
-
-            <aside className="v2-bg-zoom-tools">
-              <div className="v2-bg-tool-head">
-                <span>背景透過</span>
-                {pickedColor && (
-                  <span
-                    className="v2-picked-color"
-                    title={`RGB(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})`}
-                    style={{ background: `rgb(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})` }}
-                  />
-                )}
-              </div>
-              <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
-                {([
-                  ["auto", "自動"],
-                  ["color", "色クリック"],
-                  ["eraser", "消しゴム"],
-                ] as const).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={bgTool === key ? "is-active" : ""}
-                    onClick={() => setBgTool(key)}
-                  >
-                    {renderBgToolTabLabel(key, label)}
-                  </button>
-                ))}
-              </div>
-
-              {bgTool === "auto" && (
-                <div className="v2-bg-tool-body">
-                  {renderTransparentToggle()}
-                  <button
-                    type="button"
-                    className="v2-bg-tool-action"
-                    disabled={processing || !sheetSrc}
-                    onClick={() => void runAutoTransparency()}
-                  >
-                    自動透過を実行
-                  </button>
-                  <p>白や薄い背景が外側につながっている画像向きです。</p>
-                </div>
-              )}
-
-              {bgTool === "color" && (
-                <div className="v2-bg-tool-body">
-                  <label className="v2-bg-slider">
-                    <span>許容値 <strong>{bgTolerance}</strong></span>
-                    <input
-                      type="range"
-                      min={4}
-                      max={90}
-                      step={1}
-                      value={bgTolerance}
-                      onChange={(e) => setBgTolerance(Number(e.target.value))}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="v2-bg-tool-action"
-                    disabled={processing || !pickedColor}
-                    onClick={() => void runColorTransparency()}
-                  >
-                    この色でもう一度削除
-                  </button>
-                  <p>大きい画像上で消したい背景色をクリックします。</p>
-                </div>
-              )}
-
-              {bgTool === "eraser" && (
-                <div className="v2-bg-tool-body">
-                  <label className="v2-bg-slider">
-                    <span>ブラシ <strong>{eraseRadius}px</strong></span>
-                    <input
-                      type="range"
-                      min={4}
-                      max={80}
-                      step={1}
-                      value={eraseRadius}
-                      onChange={(e) => setEraseRadius(Number(e.target.value))}
-                    />
-                  </label>
-                  <p>大きい画像上をドラッグすると、その部分だけ透明になります。</p>
-                </div>
-              )}
-
-              {message && <p className="v2-toolbar-note">{message}</p>}
-              <p className="v2-bg-zoom-foot">ESCまたは外側クリックで閉じます。</p>
-            </aside>
-          </div>
-        </div>
-      )}
+      {bgEditZoomOpen && bgEditorSrc && renderBgEditorModal(bgEditorSrc)}
 
       {/* セル拡大モーダル */}
       {zoomCell !== null && (
