@@ -131,6 +131,14 @@ export default function StampToolV2() {
     }
   }
 
+  function handleDesignGridSizeChange(next: GridSize) {
+    setGridSize(next);
+    if (!sheetSrc && splitCells.length === 0) {
+      setSplitGridCols(next);
+      setSplitGridRows(next);
+    }
+  }
+
   // ── Step 2 & 3 共通 ───────────────────────────────
   const [selectedCellIndex, setSelectedCellIndex] = useState<number>(0);
   const [mainImageId, setMainImageId] = useState<string>("");
@@ -521,7 +529,7 @@ export default function StampToolV2() {
                 }}
                 guideStep={designRoomGuideStep}
                 gridSize={gridSize}
-                onChangeGridSize={handleGridSizeChange}
+                onChangeGridSize={handleDesignGridSizeChange}
               />
               {designRoomGuideStep > 0 && (
                 <DesignRoomCoach
