@@ -169,6 +169,7 @@ export default function Step2Splitter(props: Props) {
   const [drag, setDrag] = useState<{ axis: DragAxis; index: number } | null>(null);
   const [erasing, setErasing] = useState(false);
   const [zoomCell, setZoomCell] = useState<number | null>(null);
+  const [bgEditZoomOpen, setBgEditZoomOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [batchProgress, setBatchProgress] = useState("");
   const [trimGutter, setTrimGutter] = useState<number>(0);
@@ -538,6 +539,10 @@ export default function Step2Splitter(props: Props) {
   // ── キーボード（ESC・矢印） ───────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (bgEditZoomOpen && e.key === "Escape") {
+        setBgEditZoomOpen(false);
+        return;
+      }
       if (zoomCell === null) return;
       const lastIdx = cellCount - 1;
       if (e.key === "Escape") setZoomCell(null);
@@ -546,7 +551,7 @@ export default function Step2Splitter(props: Props) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomCell, cellCount]);
+  }, [zoomCell, cellCount, bgEditZoomOpen]);
 
   const vLines = safeCuts(verticalCuts, gridCols).map((c) => linePosition(c, OUTER_PADDING));
   const hLines = safeCuts(horizontalCuts, gridRows).map((c) => linePosition(c, OUTER_PADDING));
@@ -875,14 +880,20 @@ export default function Step2Splitter(props: Props) {
               )}
             </div>
             <div
-              ref={adjustPreviewRef}
               className={`v2-bg-edit-preview${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
-              onPointerDown={handlePreviewPointerDown}
-              onPointerMove={handlePreviewPointerMove}
-              onPointerUp={handlePreviewPointerUp}
-              onPointerCancel={handlePreviewPointerUp}
+              role="button"
+              tabIndex={0}
+              onClick={() => setBgEditZoomOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setBgEditZoomOpen(true);
+                }
+              }}
+              aria-label="背景透過プレビューを拡大して編集"
             >
               <img src={sheetSrc} alt="" draggable={false} />
+              <span className="v2-bg-edit-open">拡大して編集</span>
             </div>
             <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
               {([
@@ -940,7 +951,7 @@ export default function Step2Splitter(props: Props) {
                 >
                   この色でもう一度削除
                 </button>
-                <p>上の詳細欄を開いて、画像上の消したい背景色をクリックします。似た色の範囲は許容値で調整できます。</p>
+                <p>プレビューを拡大して、消したい背景色をクリックします。似た色の範囲は許容値で調整できます。</p>
               </div>
             )}
 
@@ -957,7 +968,7 @@ export default function Step2Splitter(props: Props) {
                     onChange={(e) => setEraseRadius(Number(e.target.value))}
                   />
                 </label>
-                <p>上の詳細欄を開いて画像上をなぞると、その部分だけ手動で透明になります。</p>
+                <p>プレビューを拡大して画像上をなぞると、その部分だけ手動で透明になります。</p>
               </div>
             )}
           </div>
@@ -1006,6 +1017,133 @@ export default function Step2Splitter(props: Props) {
           />
         </section>
       </div>
+
+      {bgEditZoomOpen && sheetSrc && (
+        <div
+          className="v2-bg-zoom-overlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setBgEditZoomOpen(false);
+          }}
+        >
+          <div className="v2-bg-zoom-modal" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="v2-bg-zoom-close"
+              onClick={() => setBgEditZoomOpen(false)}
+              aria-label="背景透過の拡大編集を閉じる"
+            >
+              ×
+            </button>
+
+            <div
+              ref={adjustPreviewRef}
+              className={`v2-bg-zoom-canvas${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
+              onPointerDown={handlePreviewPointerDown}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerUp}
+              onPointerCancel={handlePreviewPointerUp}
+            >
+              <img src={sheetSrc} alt="" draggable={false} />
+              <span className="v2-bg-zoom-hint">
+                {bgTool === "color"
+                  ? "消したい背景色をクリック"
+                  : bgTool === "eraser"
+                    ? "消したい部分をドラッグ"
+                    : "自動透過は右のボタンから実行"}
+              </span>
+            </div>
+
+            <aside className="v2-bg-zoom-tools">
+              <div className="v2-bg-tool-head">
+                <span>背景透過</span>
+                {pickedColor && (
+                  <span
+                    className="v2-picked-color"
+                    title={`RGB(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})`}
+                    style={{ background: `rgb(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})` }}
+                  />
+                )}
+              </div>
+              <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
+                {([
+                  ["auto", "自動"],
+                  ["color", "色クリック"],
+                  ["eraser", "消しゴム"],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={bgTool === key ? "is-active" : ""}
+                    onClick={() => setBgTool(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {bgTool === "auto" && (
+                <div className="v2-bg-tool-body">
+                  {renderTransparentToggle()}
+                  <button
+                    type="button"
+                    className="v2-bg-tool-action"
+                    disabled={processing || !sheetSrc}
+                    onClick={() => void runAutoTransparency()}
+                  >
+                    自動透過を実行
+                  </button>
+                  <p>白や薄い背景が外側につながっている画像向きです。</p>
+                </div>
+              )}
+
+              {bgTool === "color" && (
+                <div className="v2-bg-tool-body">
+                  <label className="v2-bg-slider">
+                    <span>許容値 <strong>{bgTolerance}</strong></span>
+                    <input
+                      type="range"
+                      min={4}
+                      max={90}
+                      step={1}
+                      value={bgTolerance}
+                      onChange={(e) => setBgTolerance(Number(e.target.value))}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="v2-bg-tool-action"
+                    disabled={processing || !pickedColor}
+                    onClick={() => void runColorTransparency()}
+                  >
+                    この色でもう一度削除
+                  </button>
+                  <p>大きい画像上で消したい背景色をクリックします。</p>
+                </div>
+              )}
+
+              {bgTool === "eraser" && (
+                <div className="v2-bg-tool-body">
+                  <label className="v2-bg-slider">
+                    <span>ブラシ <strong>{eraseRadius}px</strong></span>
+                    <input
+                      type="range"
+                      min={4}
+                      max={80}
+                      step={1}
+                      value={eraseRadius}
+                      onChange={(e) => setEraseRadius(Number(e.target.value))}
+                    />
+                  </label>
+                  <p>大きい画像上をドラッグすると、その部分だけ透明になります。</p>
+                </div>
+              )}
+
+              {message && <p className="v2-toolbar-note">{message}</p>}
+              <p className="v2-bg-zoom-foot">ESCまたは外側クリックで閉じます。</p>
+            </aside>
+          </div>
+        </div>
+      )}
 
       {/* セル拡大モーダル */}
       {zoomCell !== null && (
