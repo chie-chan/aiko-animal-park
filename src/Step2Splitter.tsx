@@ -18,7 +18,7 @@ import {
 // ======================================================================
 // Step2Splitter ―  シートをセルに分割（ライブプレビュー＋クリック拡大）
 // gridCols/gridRows=1〜5 に対応。
-// 白背景のPNGをアップロードすると白い背景を自動で透過（縁フラッドフィル）→分割する。透過済みPNGならトグルOFFでそのまま使える。
+// 取り込み時は元画像のまま分割し、背景透過は Step3 の背景透過フェーズで実行する。
 // ======================================================================
 
 interface Props {
@@ -149,7 +149,7 @@ export default function Step2Splitter(props: Props) {
           onChange={(e) => void toggleBgTransparent(e.target.checked)}
           style={{ accentColor: "#b89bea", width: 16, height: 16 }}
         />
-        ✨ 白い背景を自動で透過する
+        ✨ 自動透過を適用する
         {processing && <span style={{ color: "var(--v2-pink)" }}>（処理中…）</span>}
       </label>
     );
@@ -170,8 +170,8 @@ export default function Step2Splitter(props: Props) {
   const [message, setMessage] = useState("");
   const [batchProgress, setBatchProgress] = useState("");
   const [trimGutter, setTrimGutter] = useState<number>(0);
-  // 白背景を自動透過するか（既定ON）。rawSrc=透過前の元画像を保持し、トグルで再生成する。
-  const [bgTransparent, setBgTransparent] = useState<boolean>(true);
+  // 背景透過は取り込み時には実行せず、Step3で明示的に適用する。
+  const [bgTransparent, setBgTransparent] = useState<boolean>(false);
   const [rawSrc, setRawSrc] = useState<string | null>(null);
   const [processing, setProcessing] = useState<boolean>(false);
   const [bgTool, setBgTool] = useState<BgTool>("auto");
@@ -187,27 +187,12 @@ export default function Step2Splitter(props: Props) {
     eraseSourceRef.current = sheetSrc;
   }, [sheetSrc]);
 
-  // 取り込んだ画像に（必要なら）透過をかけて sheetSrc にセット
+  // 取り込み時は元画像のまま sheetSrc にセットする。背景透過はStep3で行う。
   async function applyUploadedSrc(url: string) {
     setRawSrc(url);
-    if (!bgTransparent) {
-      setSheetSrc(url);
-      setMessage("");
-      return;
-    }
-    setProcessing(true);
-    setMessage("背景を透過しています…");
-    try {
-      const out = await makeImageTransparent(url);
-      setSheetSrc(out);
-      setMessage("");
-    } catch (err) {
-      console.error(err);
-      setSheetSrc(url);
-      setMessage("透過に失敗したため、元の画像で読み込みました。");
-    } finally {
-      setProcessing(false);
-    }
+    setBgTransparent(false);
+    setSheetSrc(url);
+    setMessage("");
   }
 
   // 透過トグルの切替（元画像から作り直す）
@@ -928,7 +913,7 @@ export default function Step2Splitter(props: Props) {
                   disabled={processing || !sheetSrc}
                   onClick={() => void runAutoTransparency()}
                 >
-                  自動削除を再実行
+                  自動透過を実行
                 </button>
                 <p>白や薄い背景が外側につながっている画像向きです。</p>
               </div>
