@@ -38,6 +38,7 @@ type DragAxis = "vertical" | "horizontal";
 type BgTool = "auto" | "color" | "eraser";
 
 const OUTER_PADDING = 0;
+const MAX_BATCH_IMAGES = 40;
 
 // 分割プレビューの背景切替（透過の見やすさ用）
 const CHECKER_BG =
@@ -121,6 +122,7 @@ export default function Step2Splitter(props: Props) {
 
   const cellCount = gridSize * gridSize;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const batchFileInputRef = useRef<HTMLInputElement>(null);
   const adjustPreviewRef = useRef<HTMLDivElement>(null);
   const eraseSourceRef = useRef<string | null>(null);
   const eraseQueueRef = useRef<EraseStroke[]>([]);
@@ -129,6 +131,7 @@ export default function Step2Splitter(props: Props) {
   const [erasing, setErasing] = useState(false);
   const [zoomCell, setZoomCell] = useState<number | null>(null);
   const [message, setMessage] = useState("");
+  const [batchProgress, setBatchProgress] = useState("");
   const [trimGutter, setTrimGutter] = useState<number>(0);
   // 白背景を自動透過するか（既定ON）。rawSrc=透過前の元画像を保持し、トグルで再生成する。
   const [bgTransparent, setBgTransparent] = useState<boolean>(true);
@@ -345,12 +348,11 @@ export default function Step2Splitter(props: Props) {
     }
   }
 
-  // 画像アップロード時／グリッドサイズ変更時に即座に分割
+  // シート画像アップロード時／グリッドサイズ変更時に即座に分割。
+  // 40枚一括取り込みでは sheetSrc を使わないため、sheetSrc=null でも splitCells は消さない。
   useEffect(() => {
     if (sheetSrc) {
       regenerateCells(sheetSrc);
-    } else {
-      setSplitCells([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetSrc, gridSize]);
@@ -360,6 +362,48 @@ export default function Step2Splitter(props: Props) {
     if (!files || !files[0]) return;
     const url = await readFileAsDataUrl(files[0]);
     await applyUploadedSrc(url);
+  }
+
+  async function handleBatchFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (!imageFiles.length) {
+      setMessage("画像ファイルが見つかりませんでした。");
+      return;
+    }
+    const limited = imageFiles.slice(0, MAX_BATCH_IMAGES);
+    const skipped = imageFiles.length - limited.length;
+    setProcessing(true);
+    setBatchProgress(`0 / ${limited.length} 枚を処理中…`);
+    setMessage("");
+    setSheetSrc(null);
+    setRawSrc(null);
+    setPickedColor(null);
+    try {
+      const cells: SourceImage[] = [];
+      for (let i = 0; i < limited.length; i += 1) {
+        const file = limited[i];
+        setBatchProgress(`${i + 1} / ${limited.length} 枚を処理中…`);
+        const src = await readFileAsDataUrl(file);
+        const out = bgTransparent ? await makeImageTransparent(src) : src;
+        cells.push({
+          id: `batch-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: file.name || `stamp_${String(i + 1).padStart(2, "0")}.png`,
+          src: out,
+        });
+      }
+      setSplitCells(cells);
+      setBatchProgress("");
+      setMessage(
+        `${cells.length}枚を一括取り込みしました${skipped > 0 ? `（上限${MAX_BATCH_IMAGES}枚のため${skipped}枚は未取り込み）` : ""}。`,
+      );
+    } catch (err) {
+      console.error(err);
+      setMessage("一括取り込みに失敗しました。画像を確認してください。");
+    } finally {
+      setProcessing(false);
+      setBatchProgress("");
+    }
   }
 
   // ── サンプル画像読み込み（デモ用） ──────────────────
@@ -481,8 +525,8 @@ export default function Step2Splitter(props: Props) {
         <section className="v2-split-left">
           <div className="v2-canva-reminder">
             <strong>📷 スタンプ画像（白背景でもOK）</strong>をアップロードしてください。<br />
+            シート1枚を分割する方法と、完成済み画像を最大40枚まとめて取り込む方法を選べます。
             下の「✨ 白い背景を自動で透過する」をONにすれば、白い背景はこのツールが自動で透明にします。
-            すでに透過済みのPNGならOFFにしてもOKです。
           </div>
 
           {/* サンプル参考表示 */}
@@ -574,6 +618,50 @@ export default function Step2Splitter(props: Props) {
             <strong>スタンプ画像をアップロード</strong>
             <span>選んだ {gridLabel} で自動分割します（PNG推奨）</span>
           </button>
+
+          <button
+            type="button"
+            className="v2-drop-zone v2-batch-drop-zone"
+            onClick={() => batchFileInputRef.current?.click()}
+            onDrop={(e) => { e.preventDefault(); void handleBatchFiles(e.dataTransfer.files); }}
+            onDragOver={(e) => e.preventDefault()}
+            disabled={processing}
+          >
+            <span style={{ fontSize: 30 }}>🗂️</span>
+            <strong>完成済み画像を40枚まで一括取り込み</strong>
+            <span>1枚ずつ作った画像をまとめて背景透過し、並び替え・ZIP書き出しへ進めます</span>
+          </button>
+
+          {(batchProgress || (!sheetSrc && splitCells.length > 0)) && (
+            <div className="v2-batch-result">
+              <div className="v2-batch-result-head">
+                <strong>{batchProgress || `${splitCells.length}枚を取り込み済み`}</strong>
+                {splitCells.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSplitCells([]);
+                      setMessage("");
+                    }}
+                  >
+                    クリア
+                  </button>
+                )}
+              </div>
+              {splitCells.length > 0 && (
+                <div className="v2-batch-preview-grid">
+                  {splitCells.slice(0, 40).map((cell, index) => (
+                    <div key={cell.id} className="v2-batch-preview-cell">
+                      <img src={cell.src} alt="" />
+                      <span>{index + 1}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p>取り込み後は下の「次へ」から、順番・位置・メイン/タブ選択へ進めます。</p>
+            </div>
+          )}
+
           <input
             ref={fileInputRef}
             type="file"
@@ -581,6 +669,19 @@ export default function Step2Splitter(props: Props) {
             hidden
             onChange={(e) => handleFile(e.target.files)}
           />
+          <input
+            ref={batchFileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => void handleBatchFiles(e.target.files)}
+          />
+          {message && (
+            <p style={{ fontSize: 12, color: message.includes("失敗") ? "#c66" : "var(--v2-pink)", margin: "10px 0 0", textAlign: "center", fontWeight: 800 }}>
+              {message}
+            </p>
+          )}
         </section>
       </div>
     );

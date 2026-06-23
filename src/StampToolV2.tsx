@@ -10,6 +10,7 @@ import { centerImageContent, defaultCuts, type CellOffset, type GridSize, type S
 const MASCOT_TIPS: Record<number, string[]> = {
   1: [
     "まずは1×1〜5×5の画像をアップロード！白い背景なら自動で透過するよ。",
+    "1枚ずつ作った画像は、40枚までまとめて取り込めるよ。",
     "右の紫線をドラッグすると、分割位置を微調整できるよ。",
     "セルをクリックすると、その1枚を大きく拡大できるよ。",
     "サンプル画像で試したいときは、上のボタンから！",
@@ -303,7 +304,7 @@ export default function StampToolV2() {
           ← 戻る
         </button>
         <p className="v2-bottom-msg">
-          {step === 1 && "白背景の画像でもOK！アップロードすると白い背景を自動で透過 → セルに自動分割します（透過はON/OFF切替可）"}
+          {step === 1 && "シート画像は自動分割、完成済み画像は40枚まで一括取り込みできます（透過はON/OFF切替可）"}
           {step === 2 && "並び順をドラッグで入れ替え＆クリックで選んだセルの位置を微調整"}
           {step === 3 && "メイン/タブ画像を選んでZIPでダウンロード → LINE Creatorsへ"}
         </p>
@@ -386,7 +387,7 @@ export default function StampToolV2() {
             <div className="v2-notice-body">
               <h4>このツールの位置づけ</h4>
               <p>
-                うちのこスタンプ工房は、AIで作った1×1〜5×5画像を <strong>背景削除・分割・整形・スタンプ/絵文字ZIP化</strong> まで行うツールです。画像を生成したり、審査を代行したりするものではありません。
+                うちのこスタンプ工房は、AIで作った1×1〜5×5画像や完成済み画像40枚までを <strong>背景削除・分割・整形・スタンプ/絵文字ZIP化</strong> まで行うツールです。画像を生成したり、審査を代行したりするものではありません。
               </p>
 
               <h4>📝 LINE審査について</h4>
@@ -540,8 +541,8 @@ function StampGuideModal({ onClose, onOpenDesignRoom, onGoToUpload }: StampGuide
           <section className="v2-guide-lead">
             <h3>流れは「作る → 入れる（自動透過＆分割）→ 書き出す」です</h3>
             <p>
-              プロンプトで <strong>1×1〜5×5</strong> のスタンプ画像を作り、この画面にアップロード。
-              <strong>背景はこの工房で自動削除・色指定削除・消しゴム修正</strong>し、コマごとに分割してZIPで書き出します。あとは <strong>LINE Creators Market（Web）</strong> に提出するだけ。
+              プロンプトで <strong>1×1〜5×5</strong> のスタンプ画像を作るか、完成済み画像を最大40枚まとめてアップロード。
+              <strong>背景はこの工房で自動削除・色指定削除・消しゴム修正</strong>し、コマごとに整えてZIPで書き出します。あとは <strong>LINE Creators Market（Web）</strong> に提出するだけ。
               （スマホで作りたい方は <a href="/stamp-mobile">スマホ版</a> へ）
             </p>
           </section>
@@ -618,7 +619,7 @@ const DESIGN_ROOM_GUIDE_STEPS: Record<
   6: {
     kicker: "STEP 6",
     title: "画像ができたらアップロード",
-    body: "できた画像をこの画面に戻ってアップロード。白い背景なら自動で透過＆分割されます。",
+    body: "できた画像をこの画面に戻ってアップロード。シート画像なら分割、完成済み画像なら40枚までまとめて透過できます。",
   },
 };
 
@@ -939,12 +940,12 @@ function DesignRoom(props: DesignRoomProps) {
             <span className="v2-canva-box-title">✨ 画像ができたら、この工房で仕上げよう</span>
           </div>
           <p style={{ fontSize: 12.5, color: "var(--v2-ink)", margin: "2px 0 8px", lineHeight: 1.7 }}>
-            AIで作った1×1〜5×5画像を、そのままこの工房にアップロードするだけ。
+            AIで作った1×1〜5×5画像、または完成済み画像40枚までを、そのままこの工房にアップロードするだけ。
             <strong>背景は自動削除・色指定・消しゴムで調整</strong>し、コマごとに分割してZIPで書き出します。
           </p>
           <ol className="v2-canva-box-steps">
-            <li>AIで生成した1×1〜5×5画像をダウンロード</li>
-            <li>この画面にアップロード → 背景削除＆コマごとに分割</li>
+            <li>AIで生成した1×1〜5×5画像、または完成済み画像をダウンロード</li>
+            <li>この画面にアップロード → 背景削除＆必要ならコマごとに分割</li>
             <li>位置を整えて、メイン画像・タブ画像を選ぶ</li>
             <li>ZIPで書き出し → <strong>LINE Creators Market（Web）</strong>に提出</li>
           </ol>

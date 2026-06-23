@@ -94,6 +94,7 @@ export async function renderCellToSize(
   targetW: number,
   targetH: number,
   offset?: CellOffset,
+  marginPx = 0,
 ): Promise<Blob> {
   const img = await loadImage(src);
   const canvas = document.createElement("canvas");
@@ -103,21 +104,25 @@ export async function renderCellToSize(
   if (!ctx) throw new Error("Canvas context unavailable");
   ctx.clearRect(0, 0, targetW, targetH);
 
+  const maxMargin = Math.max(0, Math.floor(Math.min(targetW, targetH) / 2) - 1);
+  const safeMargin = clamp(marginPx, 0, maxMargin);
+  const innerW = Math.max(1, targetW - safeMargin * 2);
+  const innerH = Math.max(1, targetH - safeMargin * 2);
   const srcRatio = img.width / img.height;
-  const dstRatio = targetW / targetH;
+  const dstRatio = innerW / innerH;
   let drawW: number;
   let drawH: number;
   if (srcRatio > dstRatio) {
-    drawW = targetW;
-    drawH = targetW / srcRatio;
+    drawW = innerW;
+    drawH = innerW / srcRatio;
   } else {
-    drawH = targetH;
-    drawW = targetH * srcRatio;
+    drawH = innerH;
+    drawW = innerH * srcRatio;
   }
-  const offsetX = ((offset?.dx ?? 0) / 100) * targetW;
-  const offsetY = ((offset?.dy ?? 0) / 100) * targetH;
-  const x = (targetW - drawW) / 2 + offsetX;
-  const y = (targetH - drawH) / 2 + offsetY;
+  const offsetX = ((offset?.dx ?? 0) / 100) * innerW;
+  const offsetY = ((offset?.dy ?? 0) / 100) * innerH;
+  const x = safeMargin + (innerW - drawW) / 2 + offsetX;
+  const y = safeMargin + (innerH - drawH) / 2 + offsetY;
   ctx.drawImage(img, x, y, drawW, drawH);
 
   return canvasToBlob(canvas);

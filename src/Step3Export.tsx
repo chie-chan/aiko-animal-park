@@ -37,6 +37,7 @@ interface ExportPreset {
   includeMain: boolean;
   includeTab: boolean;
   downloadPrefix: string;
+  defaultMargin: number;
 }
 
 const EXPORT_PRESETS: ExportPreset[] = [
@@ -51,6 +52,7 @@ const EXPORT_PRESETS: ExportPreset[] = [
     includeMain: true,
     includeTab: true,
     downloadPrefix: "uchinoko-stamps",
+    defaultMargin: 10,
   },
   {
     id: "sticker-max",
@@ -63,6 +65,7 @@ const EXPORT_PRESETS: ExportPreset[] = [
     includeMain: true,
     includeTab: true,
     downloadPrefix: "uchinoko-stamps-max",
+    defaultMargin: 10,
   },
   {
     id: "emoji",
@@ -75,6 +78,7 @@ const EXPORT_PRESETS: ExportPreset[] = [
     includeMain: false,
     includeTab: true,
     downloadPrefix: "uchinoko-emoji",
+    defaultMargin: 15,
   },
   {
     id: "custom",
@@ -87,6 +91,7 @@ const EXPORT_PRESETS: ExportPreset[] = [
     includeMain: true,
     includeTab: true,
     downloadPrefix: "uchinoko-custom",
+    defaultMargin: 0,
   },
 ];
 
@@ -105,6 +110,7 @@ export default function Step3Export(props: Props) {
   const [presetId, setPresetId] = useState<ExportPresetId>("sticker-square");
   const [customWidth, setCustomWidth] = useState(320);
   const [customHeight, setCustomHeight] = useState(320);
+  const [bodyMargin, setBodyMargin] = useState(10);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -122,6 +128,10 @@ export default function Step3Export(props: Props) {
   useEffect(() => {
     if (!preset.includeMain && activeTab === "main") setActiveTab("tab");
   }, [activeTab, preset.includeMain]);
+
+  useEffect(() => {
+    setBodyMargin(preset.defaultMargin);
+  }, [preset.defaultMargin, preset.id]);
 
   const mainCell = splitCells.find((c) => c.id === mainImageId) ?? splitCells[0];
   const tabCell = splitCells.find((c) => c.id === tabImageId) ?? splitCells[0];
@@ -145,7 +155,7 @@ export default function Step3Export(props: Props) {
       const zip = new JSZip();
       for (let i = 0; i < splitCells.length; i += 1) {
         const cell = splitCells[i];
-        const blob = await renderCellToSize(cell.src, preset.width, preset.height, offsetFor(cell.id));
+        const blob = await renderCellToSize(cell.src, preset.width, preset.height, offsetFor(cell.id), bodyMargin);
         zip.file(`${String(i + 1).padStart(preset.fileDigits, "0")}.png`, blob);
       }
 
@@ -264,6 +274,19 @@ export default function Step3Export(props: Props) {
               </label>
             </div>
           )}
+          <label className="v2-export-margin-row">
+            <span>
+              自動余白 <strong>{bodyMargin}px</strong>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={30}
+              step={1}
+              value={bodyMargin}
+              onChange={(e) => setBodyMargin(Number(e.target.value))}
+            />
+          </label>
         </div>
 
         <div className="v2-meta-tab-row" role="tablist">
@@ -329,7 +352,7 @@ export default function Step3Export(props: Props) {
         )}
 
         <ul className="v2-export-spec-list">
-          <li>{preset.bodyLabel}：{preset.width}×{preset.height} 透過PNG ×{splitCells.length}</li>
+          <li>{preset.bodyLabel}：{preset.width}×{preset.height} 透過PNG ×{splitCells.length}（自動余白 {bodyMargin}px）</li>
           {presetId === "emoji" && <li>ファイル名：001.png〜（通常絵文字向け）</li>}
           {preset.includeMain && <li>main.png：240×240 透過PNG</li>}
           {preset.includeTab && <li>tab.png：96×74 透過PNG</li>}
