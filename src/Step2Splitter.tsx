@@ -90,6 +90,39 @@ export default function Step2Splitter(props: Props) {
     );
   }
 
+  function renderGridSizeSlider() {
+    if (!onChangeGridSize) return null;
+    const sizes: GridSize[] = [1, 2, 3, 4, 5];
+    return (
+      <div className="v2-grid-slider-card">
+        <div className="v2-grid-slider-head">
+          <div>
+            <span>シート分割サイズ</span>
+            <strong>{gridSize}×{gridSize}</strong>
+          </div>
+          <em>{gridSize * gridSize}コマ</em>
+        </div>
+        <input
+          type="range"
+          min={1}
+          max={5}
+          step={1}
+          value={gridSize}
+          aria-label="シート分割サイズ"
+          onChange={(event) => onChangeGridSize(Number(event.target.value) as GridSize)}
+        />
+        <div className="v2-grid-slider-ticks" aria-hidden="true">
+          {sizes.map((size) => (
+            <span key={size} className={gridSize === size ? "is-active" : ""}>
+              {size}×{size}
+              <small>{size * size}コマ</small>
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   // 白背景の自動透過トグル（共通レンダー）
   function renderTransparentToggle(extraClass = "") {
     return (
@@ -536,73 +569,16 @@ export default function Step2Splitter(props: Props) {
             </div>
           </div>
 
-          {/* サンプル参考表示 */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "180px 1fr",
-            gap: 18,
-            alignItems: "center",
-            background: "#fff",
-            border: "1.5px solid var(--v2-line)",
-            borderRadius: 12,
-            padding: 14,
-            marginBottom: 14,
-          }}>
-            <div style={{
-              aspectRatio: "1 / 1",
-              borderRadius: 8,
-              overflow: "hidden",
-              background: "repeating-conic-gradient(#e8dbe5 0deg 90deg, #fff 90deg 180deg) 0 0 / 14px 14px",
-              border: "1.5px solid var(--v2-line-soft)",
-            }}>
-              <img
-                src="/stamp-v2-demo/sample-sheet.png"
-                alt={`${gridLabel}スタンプシートのサンプル`}
-                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-                onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = "none"; }}
-              />
+          <div className="v2-intake-control-bar">
+            {renderGridSizeSlider()}
+            <div className="v2-intake-control-note">
+              <strong>シートから作る場合だけ選択</strong>
+              <span>1枚確認から25枚セットまで。完成済み画像の一括取り込みでは、この設定は使いません。</span>
             </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 900, color: "var(--v2-ink)", marginBottom: 6 }}>
-                シート画像を分割して使う場合
-              </div>
-              <p style={{ fontSize: 12, color: "var(--v2-muted)", lineHeight: 1.65, margin: "0 0 8px" }}>
-                AIで作った1×1〜5×5のスタンプシート画像をアップロードしてください。
-                白い背景でもOK。「✨ 白い背景を自動で透過する」がONなら、白い背景を自動で透明にします（チェック柄＝透過された場所）。
-              </p>
-              <button
-                type="button"
-                onClick={loadSample}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "7px 14px",
-                  borderRadius: 999,
-                  background: "linear-gradient(135deg, #f7a8c8, #b89bea)",
-                  color: "#fff",
-                  border: "none",
-                  fontSize: 11.5,
-                  fontWeight: 800,
-                  cursor: "pointer",
-                  boxShadow: "0 4px 10px rgba(141, 107, 223, 0.22)",
-                }}
-              >
-                🎬 このサンプルで操作を試す
-              </button>
-            </div>
+            <button type="button" className="v2-sample-mini-btn" onClick={loadSample}>
+              サンプルで試す
+            </button>
           </div>
-
-          {/* グリッドサイズ選択 */}
-          {onChangeGridSize && (
-            <div className="v2-drop-gridsize-row">
-              <span className="v2-drop-gridsize-label">シート分割サイズ：</span>
-              {renderGridSizeToggle("v2-gridsize-toggle-inline")}
-              <span className="v2-drop-gridsize-hint">
-                1枚確認から25枚セットまで対応。スタンプは8/16/24/32/40枚、絵文字は8〜40枚の素材作りに使えます。
-              </span>
-            </div>
-          )}
 
           <div
             style={{

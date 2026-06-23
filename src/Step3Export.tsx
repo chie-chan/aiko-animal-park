@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { type CellOffset, type GridSize, type SourceImage, renderCellToSize } from "./stamp-v2-split";
 import type { BgPreview } from "./StampToolV2";
 
@@ -24,7 +24,7 @@ const TAB_W = 96;
 const TAB_H = 74;
 
 type MetaTab = "main" | "tab";
-type ExportPresetId = "sticker-square" | "sticker-max" | "emoji" | "custom";
+type ExportPresetId = "sticker-max" | "emoji";
 
 interface ExportPreset {
   id: ExportPresetId;
@@ -42,21 +42,8 @@ interface ExportPreset {
 
 const EXPORT_PRESETS: ExportPreset[] = [
   {
-    id: "sticker-square",
-    label: "スタンプ正方形",
-    sub: "320×320",
-    width: 320,
-    height: 320,
-    fileDigits: 2,
-    bodyLabel: "スタンプ本体",
-    includeMain: true,
-    includeTab: true,
-    downloadPrefix: "uchinoko-stamps",
-    defaultMargin: 10,
-  },
-  {
     id: "sticker-max",
-    label: "スタンプ最大",
+    label: "スタンプ",
     sub: "370×320",
     width: 370,
     height: 320,
@@ -80,19 +67,6 @@ const EXPORT_PRESETS: ExportPreset[] = [
     downloadPrefix: "uchinoko-emoji",
     defaultMargin: 15,
   },
-  {
-    id: "custom",
-    label: "カスタム",
-    sub: "自由サイズ",
-    width: 320,
-    height: 320,
-    fileDigits: 2,
-    bodyLabel: "本体画像",
-    includeMain: true,
-    includeTab: true,
-    downloadPrefix: "uchinoko-custom",
-    defaultMargin: 0,
-  },
 ];
 
 export default function Step3Export(props: Props) {
@@ -107,23 +81,12 @@ export default function Step3Export(props: Props) {
   const gridStyle = { gridTemplateColumns: `repeat(${gridSize}, 1fr)`, pointerEvents: "none" as const };
 
   const [activeTab, setActiveTab] = useState<MetaTab>("main");
-  const [presetId, setPresetId] = useState<ExportPresetId>("sticker-square");
-  const [customWidth, setCustomWidth] = useState(320);
-  const [customHeight, setCustomHeight] = useState(320);
+  const [presetId, setPresetId] = useState<ExportPresetId>("sticker-max");
   const [bodyMargin, setBodyMargin] = useState(10);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
-  const basePreset = EXPORT_PRESETS.find((p) => p.id === presetId) ?? EXPORT_PRESETS[0];
-  const preset = useMemo<ExportPreset>(() => {
-    if (basePreset.id !== "custom") return basePreset;
-    return {
-      ...basePreset,
-      width: Math.max(1, Math.round(customWidth || 1)),
-      height: Math.max(1, Math.round(customHeight || 1)),
-      sub: `${Math.max(1, Math.round(customWidth || 1))}×${Math.max(1, Math.round(customHeight || 1))}`,
-    };
-  }, [basePreset, customHeight, customWidth]);
+  const preset = EXPORT_PRESETS.find((p) => p.id === presetId) ?? EXPORT_PRESETS[0];
 
   useEffect(() => {
     if (!preset.includeMain && activeTab === "main") setActiveTab("tab");
@@ -246,34 +209,10 @@ export default function Step3Export(props: Props) {
                 onClick={() => setPresetId(item.id)}
               >
                 <span>{item.label}</span>
-                <small>{item.id === "custom" ? `${customWidth}×${customHeight}` : item.sub}</small>
+                <small>{item.sub}</small>
               </button>
             ))}
           </div>
-          {presetId === "custom" && (
-            <div className="v2-custom-size-row">
-              <label>
-                幅
-                <input
-                  type="number"
-                  min={1}
-                  max={2000}
-                  value={customWidth}
-                  onChange={(e) => setCustomWidth(Number(e.target.value))}
-                />
-              </label>
-              <label>
-                高さ
-                <input
-                  type="number"
-                  min={1}
-                  max={2000}
-                  value={customHeight}
-                  onChange={(e) => setCustomHeight(Number(e.target.value))}
-                />
-              </label>
-            </div>
-          )}
           <label className="v2-export-margin-row">
             <span>
               自動余白 <strong>{bodyMargin}px</strong>

@@ -134,24 +134,33 @@ export default function StampToolV2() {
     false;
   const hasOpenOverlay = showStartSpotlight || showGuide || showNotice || showDesignRoom;
 
-  // 「次へ」：Step1から進むときに各セルの中身を自動で中央寄せしてから Step2 へ
+  // 取り込み直後に編集へ進むときは、進み方に関係なく各セルの中身を自動で中央寄せする。
   const [centering, setCentering] = useState<boolean>(false);
-  async function handleNext() {
-    if (step === 1 && splitCells.length > 0) {
-      setCentering(true);
-      try {
-        const centered = await Promise.all(
-          splitCells.map(async (c) => ({ ...c, src: await centerImageContent(c.src) })),
-        );
-        setSplitCells(centered);
-        setCellOffsets({}); // 自動中央寄せ後は手動オフセットをリセット
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setCentering(false);
-      }
+  async function centerCellsBeforeEdit() {
+    if (centering || splitCells.length === 0) return;
+    setCentering(true);
+    try {
+      const centered = await Promise.all(
+        splitCells.map(async (c) => ({ ...c, src: await centerImageContent(c.src) })),
+      );
+      setSplitCells(centered);
+      setCellOffsets({}); // 自動中央寄せ後は手動オフセットをリセット
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCentering(false);
     }
-    setStep((s) => Math.min(3, s + 1) as StepId);
+  }
+
+  async function goToStep(next: StepId) {
+    if (next > 1 && step === 1 && splitCells.length > 0) {
+      await centerCellsBeforeEdit();
+    }
+    setStep(next);
+  }
+
+  function handleNext() {
+    void goToStep(Math.min(3, step + 1) as StepId);
   }
 
   function openDesignRoomWithGuide() {
@@ -188,8 +197,8 @@ export default function StampToolV2() {
           <button
             type="button"
             className={`v2-stepnav-item${step === 2 ? " is-active" : step > 2 ? " is-done" : ""}`}
-            onClick={() => setStep(2)}
-            disabled={splitCells.length === 0}
+            onClick={() => void goToStep(2)}
+            disabled={splitCells.length === 0 || centering}
           >
             <span className="v2-stepnum">2</span>
             <span className="v2-steptext">
@@ -200,8 +209,8 @@ export default function StampToolV2() {
           <button
             type="button"
             className={`v2-stepnav-item${step === 3 ? " is-active" : ""}`}
-            onClick={() => setStep(3)}
-            disabled={splitCells.length === 0}
+            onClick={() => void goToStep(3)}
+            disabled={splitCells.length === 0 || centering}
           >
             <span className="v2-stepnum">3</span>
             <span className="v2-steptext">
