@@ -417,26 +417,6 @@ export default function Step2Splitter(props: Props) {
     }
   }
 
-  // ── サンプル画像読み込み（デモ用） ──────────────────
-  async function loadSample() {
-    try {
-      const res = await fetch("/stamp-v2-demo/sample-sheet.png");
-      if (!res.ok) {
-        setMessage("サンプル画像が見つかりませんでした。");
-        return;
-      }
-      const blob = await res.blob();
-      const reader = new FileReader();
-      reader.onload = () => {
-        void applyUploadedSrc(String(reader.result || ""));
-      };
-      reader.readAsDataURL(blob);
-    } catch (e) {
-      console.error(e);
-      setMessage("サンプル画像の読み込みに失敗しました。");
-    }
-  }
-
   // ── ドラッグ ──────────────────────────────────────────
   function updateCut(axis: DragAxis, index: number, value: number) {
     const cuts = axis === "vertical" ? [...verticalCuts] : [...horizontalCuts];
@@ -545,17 +525,6 @@ export default function Step2Splitter(props: Props) {
               <span>背景削除</span>
               <span>LINE用ZIP</span>
             </div>
-          </div>
-
-          <div className="v2-intake-control-bar">
-            {renderGridSizeSlider()}
-            <div className="v2-intake-control-note">
-              <strong>シートから作る場合だけ選択</strong>
-              <span>1枚確認から25枚セットまで。完成済み画像の一括取り込みでは、この設定は使いません。</span>
-            </div>
-            <button type="button" className="v2-sample-mini-btn" onClick={loadSample}>
-              サンプルで試す
-            </button>
           </div>
 
           <div
