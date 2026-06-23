@@ -565,6 +565,14 @@ export default function Step2Splitter(props: Props) {
   const hLines = safeCuts(horizontalCuts, gridRows).map((c) => linePosition(c, OUTER_PADDING));
 
   const gridLabel = `${gridCols}×${gridRows}`;
+  function renderBgToolTabLabel(key: BgTool, label: string) {
+    return (
+      <span className={`v2-bg-tool-label is-${key}`}>
+        <span className="v2-bg-tool-icon" aria-hidden="true" />
+        <span>{label}</span>
+      </span>
+    );
+  }
 
   // ── 描画 ──────────────────────────────────────────────
   if (phase === "background" && !sheetSrc && splitCells.length > 0) {
@@ -918,7 +926,7 @@ export default function Step2Splitter(props: Props) {
                     if (key !== "auto") setAdvancedOpen(true);
                   }}
                 >
-                  {label}
+                  {renderBgToolTabLabel(key, label)}
                 </button>
               ))}
             </div>
@@ -1084,7 +1092,7 @@ export default function Step2Splitter(props: Props) {
                     className={bgTool === key ? "is-active" : ""}
                     onClick={() => setBgTool(key)}
                   >
-                    {label}
+                    {renderBgToolTabLabel(key, label)}
                   </button>
                 ))}
               </div>
