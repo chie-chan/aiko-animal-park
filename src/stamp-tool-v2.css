@@ -1057,6 +1057,11 @@
   gap: 7px;
   min-width: 0;
 }
+.v2-grid-slider-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
 .v2-grid-slider-head {
   display: flex;
   align-items: flex-end;
@@ -1110,6 +1115,22 @@
   font-size: 9px;
   font-weight: 800;
 }
+.v2-grid-total-chip {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #fff7fb, #f6ecff);
+  color: var(--v2-ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+.v2-grid-total-chip span {
+  color: var(--v2-pink);
+  font-size: 11px;
+}
 /* シート読み込み済みバー */
 .v2-sheet-bar {
   display: flex;
@@ -1139,7 +1160,7 @@
   cursor: pointer;
 }
 
-/* ── ライブ16セルプレビュー（左パネル、メイン） ── */
+/* ── ライブセルプレビュー（左パネル、メイン） ── */
 .v2-live-head {
   display: flex;
   align-items: center;
@@ -1157,6 +1178,7 @@
 }
 
 .v2-live-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
@@ -1200,6 +1222,36 @@
   border-radius: 999px;
   z-index: 1;
   pointer-events: none;
+}
+.v2-live-line {
+  position: absolute;
+  z-index: 8;
+  padding: 0;
+  border: none;
+  background: rgba(241, 95, 155, 0.78);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.7), 0 2px 8px rgba(45,35,64,.16);
+}
+.v2-live-line.vertical {
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+}
+.v2-live-line.horizontal {
+  left: 0;
+  right: 0;
+  height: 3px;
+  transform: translateY(-50%);
+  cursor: ns-resize;
+}
+.v2-live-line::before {
+  content: "";
+  position: absolute;
+  inset: -16px -8px;
+}
+.v2-live-line.horizontal::before {
+  inset: -8px -16px;
 }
 
 /* ── サブ：分割線調整の小さいプレビュー（右パネル） ── */
@@ -1249,6 +1301,13 @@
 }
 .v2-adjust-gridbar .v2-grid-slider-ticks small {
   display: none;
+}
+.v2-adjust-gridbar .v2-grid-slider-stack {
+  gap: 11px;
+}
+.v2-adjust-gridbar .v2-grid-slider-card + .v2-grid-slider-card {
+  padding-top: 10px;
+  border-top: 1px solid var(--v2-line-soft);
 }
 .v2-adjust-advanced {
   margin: 8px 0 8px;
@@ -1401,6 +1460,21 @@
   margin-top: 10px;
   background: linear-gradient(135deg, #f9fdff, #fff6fb);
   border-style: solid;
+}
+.v2-batch-transparent-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  color: var(--v2-ink);
+  font-size: 11.5px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.v2-batch-transparent-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #b89bea;
 }
 .v2-batch-drop-zone:disabled {
   opacity: .55;

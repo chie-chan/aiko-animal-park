@@ -11,10 +11,10 @@ const MASCOT_TIPS: Record<number, string[]> = {
   1: [
     "まずは1×1〜5×5の画像をアップロード！白い背景なら自動で透過するよ。",
     "1枚ずつ作った画像は、40枚までまとめて取り込めるよ。",
-    "右の紫線をドラッグすると、分割位置を微調整できるよ。",
+    "プレビュー上の線をドラッグすると、分割位置を微調整できるよ。",
     "セルをクリックすると、その1枚を大きく拡大できるよ。",
-    "サンプル画像で試したいときは、上のボタンから！",
-    "隣のセルがちょっと写り込んでるときは、右下の「内側へ」スライダーを使ってね。",
+    "横と縦の分割数は別々に変えられるよ。",
+    "隣のセルがちょっと写り込んでるときは、詳細欄の「内側へ」スライダーを使ってね。",
   ],
   2: [
     "セルをドラッグすると、順番を入れ替えられるよ。",
@@ -47,6 +47,8 @@ export type BgPreview = "checker" | "white" | "black" | "pink" | "blue";
 export default function StampToolV2() {
   const [step, setStep] = useState<StepId>(1);
   const [gridSize, setGridSize] = useState<GridSize>(4);
+  const [splitGridCols, setSplitGridCols] = useState<GridSize>(4);
+  const [splitGridRows, setSplitGridRows] = useState<GridSize>(4);
 
   // ── デザインルーム（モーダル） ──────────────────────
   const [showDesignRoom, setShowDesignRoom] = useState<boolean>(false);
@@ -97,17 +99,20 @@ export default function StampToolV2() {
 
   // グリッドサイズ切替時に分割線をその初期値に戻す（セル数が変わるため）
   useEffect(() => {
-    const d = defaultCuts(gridSize);
-    setVerticalCuts(d);
-    setHorizontalCuts(d);
-  }, [gridSize]);
+    setVerticalCuts(defaultCuts(splitGridCols));
+  }, [splitGridCols]);
+
+  useEffect(() => {
+    setHorizontalCuts(defaultCuts(splitGridRows));
+  }, [splitGridRows]);
 
   // 画像が入った状態でグリッドサイズを切り替えたら、確認の上で編集状態をリセット
-  function handleGridSizeChange(next: GridSize) {
-    if (next === gridSize) return;
-    if (splitCells.length > 0) {
-      const cur = `${gridSize}×${gridSize}`;
-      const tgt = `${next}×${next}`;
+  function handleSplitGridChange(axis: "cols" | "rows", next: GridSize) {
+    const current = axis === "cols" ? splitGridCols : splitGridRows;
+    if (next === current) return;
+    if (sheetSrc && splitCells.length > 0) {
+      const cur = `${splitGridCols}×${splitGridRows}`;
+      const tgt = axis === "cols" ? `${next}×${splitGridRows}` : `${splitGridCols}×${next}`;
       const ok = window.confirm(
         `グリッドを ${cur} → ${tgt} に切り替えますか？\n\n画像は再分割され、並び替え・位置調整・メイン画像の選択はリセットされます。`,
       );
@@ -117,7 +122,13 @@ export default function StampToolV2() {
       setMainImageId("");
       setTabImageId("");
     }
-    setGridSize(next);
+    if (axis === "cols") {
+      setVerticalCuts(defaultCuts(next));
+      setSplitGridCols(next);
+    } else {
+      setHorizontalCuts(defaultCuts(next));
+      setSplitGridRows(next);
+    }
   }
 
   // ── Step 2 & 3 共通 ───────────────────────────────
@@ -273,8 +284,10 @@ export default function StampToolV2() {
             setHorizontalCuts={setHorizontalCuts}
             splitCells={splitCells}
             setSplitCells={setSplitCells}
-            gridSize={gridSize}
-            onChangeGridSize={handleGridSizeChange}
+            gridCols={splitGridCols}
+            gridRows={splitGridRows}
+            onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
+            onChangeGridRows={(next) => handleSplitGridChange("rows", next)}
           />
         )}
 
@@ -290,7 +303,8 @@ export default function StampToolV2() {
             tabImageId={tabImageId}
             bgPreview={bgPreview}
             setBgPreview={setBgPreview}
-            gridSize={gridSize}
+            gridCols={splitGridCols}
+            gridRows={splitGridRows}
           />
         )}
 
@@ -303,7 +317,8 @@ export default function StampToolV2() {
             setTabImageId={setTabImageId}
             cellOffsets={cellOffsets}
             bgPreview={bgPreview}
-            gridSize={gridSize}
+            gridCols={splitGridCols}
+            gridRows={splitGridRows}
           />
         )}
       </main>

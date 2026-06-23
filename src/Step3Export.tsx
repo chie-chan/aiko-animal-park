@@ -11,7 +11,8 @@ interface Props {
   setTabImageId: (v: string) => void;
   cellOffsets: Record<string, CellOffset>;
   bgPreview: BgPreview;
-  gridSize?: GridSize;
+  gridCols?: GridSize;
+  gridRows?: GridSize;
 }
 
 function bgClass(bg: BgPreview): string {
@@ -76,9 +77,10 @@ export default function Step3Export(props: Props) {
     tabImageId, setTabImageId,
     cellOffsets,
     bgPreview,
-    gridSize = 4,
+    gridCols = 4,
+    gridRows = 4,
   } = props;
-  const gridStyle = { gridTemplateColumns: `repeat(${gridSize}, 1fr)`, pointerEvents: "none" as const };
+  const gridStyle = { gridTemplateColumns: `repeat(${gridCols}, 1fr)`, pointerEvents: "none" as const };
 
   const [activeTab, setActiveTab] = useState<MetaTab>("main");
   const [presetId, setPresetId] = useState<ExportPresetId>("sticker-max");
@@ -154,7 +156,7 @@ export default function Step3Export(props: Props) {
       <div className="v2-placeholder">
         <div className="v2-placeholder-card">
           <h3>まだ画像がありません</h3>
-          <p>「素材を取り込む」で{gridSize}×{gridSize}画像を分割、または完成済み画像を一括取り込みしてから戻ってきてください。</p>
+          <p>「素材を取り込む」で{gridCols}×{gridRows}画像を分割、または完成済み画像を一括取り込みしてから戻ってきてください。</p>
         </div>
       </div>
     );

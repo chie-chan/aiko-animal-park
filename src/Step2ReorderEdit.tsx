@@ -18,7 +18,8 @@ interface Props {
   tabImageId: string;
   bgPreview: BgPreview;
   setBgPreview: (v: BgPreview) => void;
-  gridSize?: GridSize;
+  gridCols?: GridSize;
+  gridRows?: GridSize;
 }
 
 const BG_OPTIONS: { value: BgPreview; label: string; cls: string }[] = [
@@ -47,9 +48,10 @@ export default function Step2ReorderEdit(props: Props) {
     cellOffsets, setCellOffsets,
     mainImageId, tabImageId,
     bgPreview, setBgPreview,
-    gridSize = 4,
+    gridCols = 4,
+    gridRows = 4,
   } = props;
-  const gridStyle = { gridTemplateColumns: `repeat(${gridSize}, 1fr)` };
+  const gridStyle = { gridTemplateColumns: `repeat(${gridCols}, 1fr)` };
 
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -149,7 +151,7 @@ export default function Step2ReorderEdit(props: Props) {
       <div className="v2-placeholder">
         <div className="v2-placeholder-card">
           <h3>📥 まだ画像がありません</h3>
-          <p>「素材を取り込む」で{gridSize}×{gridSize}画像、または完成済み画像を読み込んでから戻ってきてください。</p>
+          <p>「素材を取り込む」で{gridCols}×{gridRows}画像、または完成済み画像を読み込んでから戻ってきてください。</p>
         </div>
       </div>
     );

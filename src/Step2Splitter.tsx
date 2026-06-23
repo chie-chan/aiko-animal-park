@@ -17,7 +17,7 @@ import {
 
 // ======================================================================
 // Step2Splitter ―  シートをセルに分割（ライブプレビュー＋クリック拡大）
-// gridSize=1〜5 に対応。
+// gridCols/gridRows=1〜5 に対応。
 // 白背景のPNGをアップロードすると白い背景を自動で透過（縁フラッドフィル）→分割する。透過済みPNGならトグルOFFでそのまま使える。
 // ======================================================================
 
@@ -30,8 +30,10 @@ interface Props {
   setHorizontalCuts: (v: number[]) => void;
   splitCells: SourceImage[];
   setSplitCells: (v: SourceImage[]) => void;
-  gridSize?: GridSize;
-  onChangeGridSize?: (g: GridSize) => void;
+  gridCols?: GridSize;
+  gridRows?: GridSize;
+  onChangeGridCols?: (g: GridSize) => void;
+  onChangeGridRows?: (g: GridSize) => void;
 }
 
 type DragAxis = "vertical" | "horizontal";
@@ -64,38 +66,56 @@ export default function Step2Splitter(props: Props) {
     verticalCuts, setVerticalCuts,
     horizontalCuts, setHorizontalCuts,
     splitCells, setSplitCells,
-    gridSize = 4,
-    onChangeGridSize,
+    gridCols = 4,
+    gridRows = 4,
+    onChangeGridCols,
+    onChangeGridRows,
   } = props;
 
-  function renderGridSizeSlider() {
-    if (!onChangeGridSize) return null;
+  function renderGridDimensionSlider(
+    kind: "cols" | "rows",
+    value: GridSize,
+    onChange?: (g: GridSize) => void,
+  ) {
+    if (!onChange) return null;
     const sizes: GridSize[] = [1, 2, 3, 4, 5];
+    const label = kind === "cols" ? "横の分割（列数）" : "縦の分割（行数）";
     return (
       <div className="v2-grid-slider-card">
         <div className="v2-grid-slider-head">
           <div>
-            <span>シート分割サイズ</span>
-            <strong>{gridSize}×{gridSize}</strong>
+            <span>{label}</span>
+            <strong>{value}</strong>
           </div>
-          <em>{gridSize * gridSize}コマ</em>
+          <em>{kind === "cols" ? "横" : "縦"}</em>
         </div>
         <input
           type="range"
           min={1}
           max={5}
           step={1}
-          value={gridSize}
-          aria-label="シート分割サイズ"
-          onChange={(event) => onChangeGridSize(Number(event.target.value) as GridSize)}
+          value={value}
+          aria-label={label}
+          onChange={(event) => onChange(Number(event.target.value) as GridSize)}
         />
         <div className="v2-grid-slider-ticks" aria-hidden="true">
           {sizes.map((size) => (
-            <span key={size} className={gridSize === size ? "is-active" : ""}>
-              {size}×{size}
-              <small>{size * size}コマ</small>
+            <span key={size} className={value === size ? "is-active" : ""}>
+              {size}
             </span>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderGridSizeSliders() {
+    return (
+      <div className="v2-grid-slider-stack">
+        {renderGridDimensionSlider("cols", gridCols, onChangeGridCols)}
+        {renderGridDimensionSlider("rows", gridRows, onChangeGridRows)}
+        <div className="v2-grid-total-chip">
+          {gridCols}×{gridRows}<span>{gridCols * gridRows}コマ</span>
         </div>
       </div>
     );
@@ -131,10 +151,12 @@ export default function Step2Splitter(props: Props) {
     );
   }
 
-  const cellCount = gridSize * gridSize;
+  const cellCount = gridCols * gridRows;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchFileInputRef = useRef<HTMLInputElement>(null);
+  const liveGridRef = useRef<HTMLDivElement>(null);
   const adjustPreviewRef = useRef<HTMLDivElement>(null);
+  const dragBoundsRef = useRef<HTMLElement | null>(null);
   const eraseSourceRef = useRef<string | null>(null);
   const eraseQueueRef = useRef<EraseStroke[]>([]);
   const eraseBusyRef = useRef(false);
@@ -146,9 +168,11 @@ export default function Step2Splitter(props: Props) {
   const [trimGutter, setTrimGutter] = useState<number>(0);
   // 白背景を自動透過するか（既定ON）。rawSrc=透過前の元画像を保持し、トグルで再生成する。
   const [bgTransparent, setBgTransparent] = useState<boolean>(true);
+  const [batchTransparent, setBatchTransparent] = useState<boolean>(true);
   const [rawSrc, setRawSrc] = useState<string | null>(null);
   const [processing, setProcessing] = useState<boolean>(false);
   const [bgTool, setBgTool] = useState<BgTool>("auto");
+  const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
   const [bgTolerance, setBgTolerance] = useState<number>(24);
   const [eraseRadius, setEraseRadius] = useState<number>(22);
   const [pickedColor, setPickedColor] = useState<RgbColor | null>(null);
@@ -297,37 +321,38 @@ export default function Step2Splitter(props: Props) {
 
   // ── 各列・行のサイズ（fr単位）を計算（プレビューグリッドの比率に使う） ──
   const gridStyle = useMemo(() => {
-    const vc = safeCuts(verticalCuts, gridSize);
-    const hc = safeCuts(horizontalCuts, gridSize);
+    const vc = safeCuts(verticalCuts, gridCols);
+    const hc = safeCuts(horizontalCuts, gridRows);
     const xs = [OUTER_PADDING, ...vc.map((c) => linePosition(c, OUTER_PADDING)), 100 - OUTER_PADDING];
     const ys = [OUTER_PADDING, ...hc.map((c) => linePosition(c, OUTER_PADDING)), 100 - OUTER_PADDING];
-    const colSizes = Array.from({ length: gridSize }, (_, i) => xs[i + 1] - xs[i]);
-    const rowSizes = Array.from({ length: gridSize }, (_, i) => ys[i + 1] - ys[i]);
+    const colSizes = Array.from({ length: gridCols }, (_, i) => xs[i + 1] - xs[i]);
+    const rowSizes = Array.from({ length: gridRows }, (_, i) => ys[i + 1] - ys[i]);
     return {
       gridTemplateColumns: colSizes.map((s) => `${s}fr`).join(" "),
       gridTemplateRows: rowSizes.map((s) => `${s}fr`).join(" "),
     };
-  }, [verticalCuts, horizontalCuts, gridSize]);
+  }, [verticalCuts, horizontalCuts, gridCols, gridRows]);
 
   // ── セルの座標（%）をライブ計算（trimGutter込み） ────
   const cellRegions: CellRegion[] = useMemo(() => {
-    const vc = safeCuts(verticalCuts, gridSize);
-    const hc = safeCuts(horizontalCuts, gridSize);
+    const vc = safeCuts(verticalCuts, gridCols);
+    const hc = safeCuts(horizontalCuts, gridRows);
     const xs = [OUTER_PADDING, ...vc.map((c) => linePosition(c, OUTER_PADDING)), 100 - OUTER_PADDING];
     const ys = [OUTER_PADDING, ...hc.map((c) => linePosition(c, OUTER_PADDING)), 100 - OUTER_PADDING];
     const trimHalf = trimGutter / 2;
     const list: CellRegion[] = [];
-    const last = gridSize - 1;
-    for (let row = 0; row < gridSize; row++) {
-      for (let col = 0; col < gridSize; col++) {
+    const lastCol = gridCols - 1;
+    const lastRow = gridRows - 1;
+    for (let row = 0; row < gridRows; row++) {
+      for (let col = 0; col < gridCols; col++) {
         const baseX = xs[col];
         const baseY = ys[row];
         const baseW = xs[col + 1] - xs[col];
         const baseH = ys[row + 1] - ys[row];
         const leftTrim = col === 0 ? 0 : trimHalf;
-        const rightTrim = col === last ? 0 : trimHalf;
+        const rightTrim = col === lastCol ? 0 : trimHalf;
         const topTrim = row === 0 ? 0 : trimHalf;
-        const bottomTrim = row === last ? 0 : trimHalf;
+        const bottomTrim = row === lastRow ? 0 : trimHalf;
         list.push({
           x: baseX + leftTrim,
           y: baseY + topTrim,
@@ -337,7 +362,7 @@ export default function Step2Splitter(props: Props) {
       }
     }
     return list;
-  }, [verticalCuts, horizontalCuts, trimGutter, gridSize]);
+  }, [verticalCuts, horizontalCuts, trimGutter, gridCols, gridRows]);
 
   // ── PNG実体を再生成（アップロード時・ドラッグ確定時） ──
   async function regenerateCells(src: string) {
@@ -348,8 +373,8 @@ export default function Step2Splitter(props: Props) {
         trimGutter,
         verticalCuts,
         horizontalCuts,
-        gridSize,
-        gridSize,
+        gridCols,
+        gridRows,
       );
       setSplitCells(cells);
       setMessage("");
@@ -366,7 +391,7 @@ export default function Step2Splitter(props: Props) {
       regenerateCells(sheetSrc);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetSrc, gridSize]);
+  }, [sheetSrc, gridCols, gridRows]);
 
   // ── ファイル取り込み ────────────────────────────────
   async function handleFile(files: FileList | null) {
@@ -396,7 +421,7 @@ export default function Step2Splitter(props: Props) {
         const file = limited[i];
         setBatchProgress(`${i + 1} / ${limited.length} 枚を処理中…`);
         const src = await readFileAsDataUrl(file);
-        const out = bgTransparent ? await makeImageTransparent(src) : src;
+        const out = batchTransparent ? await makeImageTransparent(src) : src;
         cells.push({
           id: `batch-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: file.name || `stamp_${String(i + 1).padStart(2, "0")}.png`,
@@ -421,19 +446,20 @@ export default function Step2Splitter(props: Props) {
   function updateCut(axis: DragAxis, index: number, value: number) {
     const cuts = axis === "vertical" ? [...verticalCuts] : [...horizontalCuts];
     cuts[index] = clamp(value, 4, 96);
-    const safe = safeCuts(cuts, gridSize);
+    const safe = safeCuts(cuts, axis === "vertical" ? gridCols : gridRows);
     if (axis === "vertical") setVerticalCuts(safe);
     else setHorizontalCuts(safe);
   }
-  function startDrag(event: React.PointerEvent, axis: DragAxis, index: number) {
+  function startDrag(event: React.PointerEvent, axis: DragAxis, index: number, bounds?: HTMLElement | null) {
     event.preventDefault();
     event.stopPropagation();
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
+    dragBoundsRef.current = bounds ?? adjustPreviewRef.current;
     setDrag({ axis, index });
   }
   function handleDragMove(event: React.PointerEvent) {
-    if (!drag || !adjustPreviewRef.current) return;
-    const rect = adjustPreviewRef.current.getBoundingClientRect();
+    if (!drag || !dragBoundsRef.current) return;
+    const rect = dragBoundsRef.current.getBoundingClientRect();
     const pos = drag.axis === "vertical"
       ? ((event.clientX - rect.left) / rect.width) * 100
       : ((event.clientY - rect.top) / rect.height) * 100;
@@ -447,6 +473,7 @@ export default function Step2Splitter(props: Props) {
       // ドラッグ確定時にPNG再生成
       regenerateCells(sheetSrc);
     }
+    dragBoundsRef.current = null;
     setDrag(null);
   }
 
@@ -484,9 +511,8 @@ export default function Step2Splitter(props: Props) {
     stopDrag();
   }
   function resetCuts() {
-    const d = defaultCuts(gridSize);
-    setVerticalCuts(d);
-    setHorizontalCuts(d);
+    setVerticalCuts(defaultCuts(gridCols));
+    setHorizontalCuts(defaultCuts(gridRows));
     if (sheetSrc) regenerateCells(sheetSrc);
   }
 
@@ -503,10 +529,10 @@ export default function Step2Splitter(props: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomCell, cellCount]);
 
-  const vLines = safeCuts(verticalCuts, gridSize).map((c) => linePosition(c, OUTER_PADDING));
-  const hLines = safeCuts(horizontalCuts, gridSize).map((c) => linePosition(c, OUTER_PADDING));
+  const vLines = safeCuts(verticalCuts, gridCols).map((c) => linePosition(c, OUTER_PADDING));
+  const hLines = safeCuts(horizontalCuts, gridRows).map((c) => linePosition(c, OUTER_PADDING));
 
-  const gridLabel = `${gridSize}×${gridSize}`;
+  const gridLabel = `${gridCols}×${gridRows}`;
 
   // ── 描画 ──────────────────────────────────────────────
   if (!sheetSrc) {
@@ -527,21 +553,11 @@ export default function Step2Splitter(props: Props) {
             </div>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              margin: "2px 0 12px",
-            }}
-          >
-            {renderTransparentToggle()}
-          </div>
-
           <div className="v2-intake-options">
             <section className="v2-intake-option">
               <div className="v2-intake-option-label">
                 <span>シートから作る</span>
-                <small>{gridLabel} を分割</small>
+                <small>{gridLabel} に分割</small>
               </div>
               <button
                 type="button"
@@ -573,6 +589,15 @@ export default function Step2Splitter(props: Props) {
                 <strong>完成済み画像を一括取り込み</strong>
                 <span>1枚ずつ作った画像をまとめて整えます</span>
               </button>
+              <label className="v2-batch-transparent-toggle">
+                <input
+                  type="checkbox"
+                  checked={batchTransparent}
+                  disabled={processing}
+                  onChange={(event) => setBatchTransparent(event.target.checked)}
+                />
+                <span>完成画像も白背景を透過して取り込む</span>
+              </label>
             </section>
           </div>
 
@@ -664,7 +689,14 @@ export default function Step2Splitter(props: Props) {
             </div>
           </div>
 
-          <div className="v2-live-grid" style={gridStyle}>
+          <div
+            ref={liveGridRef}
+            className="v2-live-grid"
+            style={gridStyle}
+            onPointerMove={handleDragMove}
+            onPointerUp={stopDrag}
+            onPointerCancel={stopDrag}
+          >
             {cellRegions.map((r, i) => (
               <button
                 key={i}
@@ -687,6 +719,26 @@ export default function Step2Splitter(props: Props) {
                 />
               </button>
             ))}
+            {vLines.map((pct, i) => (
+              <button
+                key={`live-v-${i}`}
+                type="button"
+                className="v2-live-line vertical"
+                style={{ left: `${pct}%` }}
+                aria-label={`縦の分割線 ${i + 1}本目を調整`}
+                onPointerDown={(e) => startDrag(e, "vertical", i, liveGridRef.current)}
+              />
+            ))}
+            {hLines.map((pct, i) => (
+              <button
+                key={`live-h-${i}`}
+                type="button"
+                className="v2-live-line horizontal"
+                style={{ top: `${pct}%` }}
+                aria-label={`横の分割線 ${i + 1}本目を調整`}
+                onPointerDown={(e) => startDrag(e, "horizontal", i, liveGridRef.current)}
+              />
+            ))}
           </div>
         </section>
 
@@ -696,13 +748,17 @@ export default function Step2Splitter(props: Props) {
           <p className="v2-adjust-sub">通常はグリッドサイズと自動背景削除だけで進めます。細かい手動調整は必要な時だけ開けます。</p>
 
           {/* グリッドサイズ切替 */}
-          {onChangeGridSize && (
+          {(onChangeGridCols || onChangeGridRows) && (
             <div className="v2-adjust-gridbar">
-              {renderGridSizeSlider()}
+              {renderGridSizeSliders()}
             </div>
           )}
 
-          <details className="v2-adjust-advanced">
+          <details
+            className="v2-adjust-advanced"
+            open={advancedOpen}
+            onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+          >
             <summary>分割線・セル余白・手動削除を調整</summary>
             <div
               ref={adjustPreviewRef}
@@ -720,7 +776,7 @@ export default function Step2Splitter(props: Props) {
                   className="v2-sheet-line vertical"
                   style={{ left: `${pct}%` }}
                   aria-label={`縦の分割線 ${i + 1}本目`}
-                  onPointerDown={(e) => startDrag(e, "vertical", i)}
+                  onPointerDown={(e) => startDrag(e, "vertical", i, adjustPreviewRef.current)}
                 />
               ))}
               {hLines.map((pct, i) => (
@@ -730,7 +786,7 @@ export default function Step2Splitter(props: Props) {
                   className="v2-sheet-line horizontal"
                   style={{ top: `${pct}%` }}
                   aria-label={`横の分割線 ${i + 1}本目`}
-                  onPointerDown={(e) => startDrag(e, "horizontal", i)}
+                  onPointerDown={(e) => startDrag(e, "horizontal", i, adjustPreviewRef.current)}
                 />
               ))}
             </div>
@@ -776,7 +832,10 @@ export default function Step2Splitter(props: Props) {
                   key={key}
                   type="button"
                   className={bgTool === key ? "is-active" : ""}
-                  onClick={() => setBgTool(key)}
+                  onClick={() => {
+                    setBgTool(key);
+                    if (key !== "auto") setAdvancedOpen(true);
+                  }}
                 >
                   {label}
                 </button>
