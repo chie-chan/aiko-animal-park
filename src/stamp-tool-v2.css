@@ -24,7 +24,7 @@
 .v2-shell {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  height: calc(100vh - 64px); /* App header分を引く。footerは下のbarで処理 */
+  height: 100vh;
   min-height: 620px;
   background: var(--v2-bg);
   color: var(--v2-ink);

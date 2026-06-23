@@ -10,15 +10,17 @@ import ThreadsPresentPage from "./ThreadsPresentPage";
 import StampAnalyticsAdmin from "./StampAnalyticsAdmin";
 
 const NOTE_HOME_URL = "https://note.com/aiko_animal";
+const STAMP_TOOL_PATHS = new Set(["/stamp", "/stamp-room", "/stamp-mobile"]);
 
 export default function App() {
   const location = useLocation();
   const galleryTab = new URLSearchParams(location.search).get("tab") === "works" ? "works" : "catalog";
   const isGalleryRoute = location.pathname === "/gallery" || location.pathname === "/gallery.html";
+  const isStampToolRoute = STAMP_TOOL_PATHS.has(location.pathname);
 
   return (
-    <div className="app-shell standalone-tool-shell">
-      <header className="site-header standalone-tool-header">
+    <div className={`app-shell standalone-tool-shell${isStampToolRoute ? " stamp-tool-only-shell" : ""}`}>
+      {!isStampToolRoute ? <header className="site-header standalone-tool-header">
         <NavLink to="/gallery?tab=catalog" className="brand-link" aria-label="うちの子AIスタジオ">
           <img className="brand-mark" src="/aiko-dog-icon.jpeg" alt="" />
           <span>
@@ -50,7 +52,7 @@ export default function App() {
             制作依頼
           </a>
         </nav>
-      </header>
+      </header> : null}
 
       <Routes>
         <Route path="/" element={<Navigate to="/gallery?tab=catalog" replace />} />
@@ -63,19 +65,20 @@ export default function App() {
         <Route path="/style-zukan" element={<StyleZukanPage />} />
         <Route path="/candidate-studio" element={<CandidateStudioPage />} />
         <Route path="/styles" element={<Navigate to="/style-zukan" replace />} />
-        <Route path="/stamp" element={<Navigate to="/stamp-v2" replace />} />
-        <Route path="/stamp-v2" element={<StampToolV2 />} />
+        <Route path="/stamp" element={<Navigate to="/stamp-room" replace />} />
+        <Route path="/stamp-room" element={<StampToolV2 />} />
+        <Route path="/stamp-v2" element={<Navigate to="/gallery?tab=catalog" replace />} />
         <Route path="/stamp-v2-admin" element={<StampAnalyticsAdmin />} />
         <Route path="/stamp-mobile" element={<StampToolMobile />} />
         <Route path="*" element={<Navigate to="/gallery?tab=catalog" replace />} />
       </Routes>
 
-      <footer className="site-footer">
+      {!isStampToolRoute ? <footer className="site-footer">
         <a href="https://x.com/aiaiaigirl" target="_blank" rel="noreferrer">
           Created by aiko animal
         </a>
         <span>掲載画像の無断転載・二次利用はご遠慮ください。</span>
-      </footer>
+      </footer> : null}
     </div>
   );
 }
