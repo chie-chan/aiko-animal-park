@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./stamp-tool-v2.css";
-import { FRAME_DESIGNS, type FrameDesign, type PetKind, type PetKindOrNone } from "./stamp-v2-frames";
+import { FRAME_DESIGNS, getDefaultStampTextLines, type FrameDesign, type PetKind, type PetKindOrNone } from "./stamp-v2-frames";
 import FloatingMascot from "./FloatingMascot";
 import Step2Splitter from "./Step2Splitter";
 import Step2ReorderEdit from "./Step2ReorderEdit";
@@ -45,8 +45,27 @@ const MASCOT_TIPS: Record<number, string[]> = {
 
 type StepId = 1 | 2 | 3 | 4 | 5;
 type IntakeMode = "sheet" | "batch" | null;
-type DesignRoomGuideStep = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+type DesignRoomGuideStep = 0 | 1 | 2 | 3 | 4 | 5;
 export type BgPreview = "checker" | "white" | "black" | "pink" | "blue";
+
+const GRID_SIZES = [1, 2, 3, 4, 5] as GridSize[];
+
+const DEFAULT_STAMP_TEXT_DRAFTS: Record<GridSize, string> = GRID_SIZES.reduce(
+  (drafts, size) => {
+    drafts[size] = getDefaultStampTextLines(size).join("\n");
+    return drafts;
+  },
+  {} as Record<GridSize, string>,
+);
+
+function getStampTextDraftLines(draft: string, gridSize: GridSize): string[] {
+  const defaults = getDefaultStampTextLines(gridSize);
+  const entered = draft.split(/\r?\n/);
+  return defaults.map((fallback, index) => {
+    const line = entered[index]?.trim();
+    return line || fallback;
+  });
+}
 
 export default function StampToolV2() {
   const [step, setStep] = useState<StepId>(1);
@@ -63,20 +82,38 @@ export default function StampToolV2() {
   const [selectedFrameId, setSelectedFrameId] = useState<string>(FRAME_DESIGNS[0].id);
   const [petKind, setPetKind] = useState<PetKindOrNone>(null);
   const [petKindOther, setPetKindOther] = useState<string>("");
-  const [features, setFeatures] = useState("");
+  const [stampTextDrafts, setStampTextDrafts] = useState<Record<GridSize, string>>(
+    DEFAULT_STAMP_TEXT_DRAFTS,
+  );
   const [copied, setCopied] = useState(false);
 
   const selectedFrame = useMemo(
     () => FRAME_DESIGNS.find((f) => f.id === selectedFrameId) ?? FRAME_DESIGNS[0],
     [selectedFrameId],
   );
+  const stampTextDraft = stampTextDrafts[gridSize] ?? DEFAULT_STAMP_TEXT_DRAFTS[gridSize];
+  const stampTexts = useMemo(
+    () => getStampTextDraftLines(stampTextDraft, gridSize),
+    [stampTextDraft, gridSize],
+  );
   const generatedPrompt = useMemo(
-    () => selectedFrame.buildPrompt({ petKind, petKindOther, features }, gridSize),
-    [selectedFrame, petKind, petKindOther, features, gridSize],
+    () => selectedFrame.buildPrompt({ petKind, petKindOther, stampTexts }, gridSize),
+    [selectedFrame, petKind, petKindOther, stampTexts, gridSize],
   );
   // その他選択時は自由記述が必須
   const canCopy =
     petKind !== null && (petKind !== "その他" || petKindOther.trim().length > 0);
+
+  function handleStampTextDraftChange(value: string) {
+    setStampTextDrafts((current) => ({ ...current, [gridSize]: value }));
+  }
+
+  function handleStampTextDraftReset() {
+    setStampTextDrafts((current) => ({
+      ...current,
+      [gridSize]: DEFAULT_STAMP_TEXT_DRAFTS[gridSize],
+    }));
+  }
 
   async function handleCopy() {
     try {
@@ -660,8 +697,9 @@ export default function StampToolV2() {
                 onChangePetKind={setPetKind}
                 petKindOther={petKindOther}
                 onChangePetKindOther={setPetKindOther}
-                features={features}
-                onChangeFeatures={setFeatures}
+                stampTextDraft={stampTextDraft}
+                onChangeStampTextDraft={handleStampTextDraftChange}
+                onResetStampTextDraft={handleStampTextDraftReset}
                 generatedPrompt={generatedPrompt}
                 canCopy={canCopy}
                 copied={copied}
@@ -680,7 +718,7 @@ export default function StampToolV2() {
                   onClose={() => setDesignRoomGuideStep(0)}
                   onNext={() =>
                     setDesignRoomGuideStep((current) =>
-                      current >= 6 ? 0 : ((current + 1) as DesignRoomGuideStep),
+                      current >= 5 ? 0 : ((current + 1) as DesignRoomGuideStep),
                     )
                   }
                 />
@@ -812,18 +850,13 @@ const DESIGN_ROOM_GUIDE_STEPS: Record<
   },
   4: {
     kicker: "STEP 4",
-    title: "特徴も入れてね",
-    body: "毛色・耳・目・柄などを書くと、うちの子らしさが出やすいです。ここは任意です。",
+    title: "セリフを変えたい時はこちら",
+    body: "分割数に合わせて1行1コマでセリフを変えられます。長い言葉は崩れやすいので、短めがおすすめです。",
   },
   5: {
     kicker: "STEP 5",
     title: "プロンプトをコピーしてね",
     body: "コピーしたプロンプトを、ペット画像と一緒にChatGPTへ貼り付けてください。",
-  },
-  6: {
-    kicker: "STEP 6",
-    title: "画像ができたらアップロード",
-    body: "できた画像をこの画面に戻ってアップロード。シート画像なら分割、完成済み画像なら40枚までまとめて透過できます。",
   },
 };
 
@@ -872,8 +905,9 @@ interface DesignRoomProps {
   onChangePetKind: (v: PetKind) => void;
   petKindOther: string;
   onChangePetKindOther: (v: string) => void;
-  features: string;
-  onChangeFeatures: (v: string) => void;
+  stampTextDraft: string;
+  onChangeStampTextDraft: (v: string) => void;
+  onResetStampTextDraft: () => void;
   generatedPrompt: string;
   canCopy: boolean;
   copied: boolean;
@@ -894,8 +928,9 @@ function DesignRoom(props: DesignRoomProps) {
     onChangePetKind,
     petKindOther,
     onChangePetKindOther,
-    features,
-    onChangeFeatures,
+    stampTextDraft,
+    onChangeStampTextDraft,
+    onResetStampTextDraft,
     generatedPrompt,
     canCopy,
     copied,
@@ -930,6 +965,8 @@ function DesignRoom(props: DesignRoomProps) {
   const canUseZoomedFrame = Boolean(
     zoomedFrame && featuredFrames.some((frame) => frame.id === zoomedFrame.id),
   );
+  const stampTextTotal = gridSize * gridSize;
+  const stampTextLineCount = stampTextDraft.split(/\r?\n/).filter((line) => line.trim()).length;
 
   return (
     <div className="v2-design-room">
@@ -1084,24 +1121,31 @@ function DesignRoom(props: DesignRoomProps) {
                 style={{ marginTop: 6 }}
               />
             )}
-            <span className="v2-form-help">
-              AIが種類を取り違えないよう、必ず選んでください（猫の写真でも犬として描かれてしまうのを防ぎます）。
-            </span>
           </div>
 
           <div className={`v2-form-row${guideStep === 4 ? " is-guide-target" : ""}`}>
-            <label className="v2-form-label" htmlFor="v2-pet-features">
-              特徴 <span className="v2-form-optional">任意</span>
-            </label>
+            <div className="v2-form-label-row">
+              <label className="v2-form-label" htmlFor="v2-stamp-texts">
+                セリフを変えたい場合はこちら <span className="v2-form-optional">任意</span>
+              </label>
+              <button
+                type="button"
+                className="v2-text-reset"
+                onClick={onResetStampTextDraft}
+              >
+                定番に戻す
+              </button>
+            </div>
             <textarea
-              id="v2-pet-features"
-              className="v2-form-textarea"
-              value={features}
-              onChange={(e) => onChangeFeatures(e.target.value)}
-              placeholder="例：白黒のパピヨンミックス、大きな耳、緑がかった目、ふわふわの被毛"
-              rows={2}
+              id="v2-stamp-texts"
+              className="v2-form-textarea v2-stamp-textarea"
+              value={stampTextDraft}
+              onChange={(e) => onChangeStampTextDraft(e.target.value)}
+              rows={4}
             />
-            <span className="v2-form-help">毛色・柄・耳の形・体型などを書くと再現度が上がります。</span>
+            <span className="v2-form-help">
+              1行1コマで反映します（{stampTextLineCount}/{stampTextTotal}行）。長いセリフは文字が破綻しやすいので、後入れか短い言葉がおすすめです。
+            </span>
           </div>
         </div>
 
@@ -1126,54 +1170,16 @@ function DesignRoom(props: DesignRoomProps) {
             >
               {copied ? "✓ コピーしました" : "📋 プロンプトをコピー"}
             </button>
-          </div>
-
-          <div className="v2-ai-hint">
-            <span>おすすめ：</span>
-            <span className="v2-ai-tag" style={{ background: "linear-gradient(135deg, #f7a8c8, #b89bea)", color: "#fff", border: "none", fontWeight: 900 }}>
-              ⭐ ChatGPT
-            </span>
-          </div>
-          <p className="v2-ai-note">
-            このプロンプトはChatGPTでの仕上がりに合わせてチューニングしています。
-          </p>
-        </div>
-
-        <div className={`v2-canva-box${guideStep === 6 ? " is-guide-target" : ""}`}>
-          <div className="v2-canva-box-head">
-            <span className="v2-canva-box-title">✨ 画像ができたら、この工房で仕上げよう</span>
-          </div>
-          <p style={{ fontSize: 12.5, color: "var(--v2-ink)", margin: "2px 0 8px", lineHeight: 1.7 }}>
-            AIで作った1×1〜5×5画像、または完成済み画像40枚までを、そのままこの工房にアップロードするだけ。
-            <strong>背景は自動削除・色指定・消しゴムで調整</strong>し、コマごとに分割してZIPで書き出します。
-          </p>
-          <ol className="v2-canva-box-steps">
-            <li>AIで生成した1×1〜5×5画像、または完成済み画像をダウンロード</li>
-            <li>この画面にアップロード → 背景削除＆必要ならコマごとに分割</li>
-            <li>位置を整えて、メイン画像・タブ画像を選ぶ</li>
-            <li>ZIPで書き出し → <strong>LINE Creators Market（Web）</strong>に提出</li>
-          </ol>
-          <div className="v2-canva-actions">
-            <a
-              className="v2-canva-link"
-              href="https://creator.line.me/ja/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              🌐 LINE Creators Market
-            </a>
             <button
               type="button"
-              className="v2-canva-link is-primary"
+              className="v2-btn-copy is-secondary"
               onClick={onGoToStep2}
             >
-              → 画像をアップロードへ
+              画像アップロードへ
             </button>
           </div>
-          <p style={{ fontSize: 11, color: "var(--v2-muted)", margin: "10px 0 0", lineHeight: 1.65 }}>
-            スマホで作りたい方は <a href="/stamp-mobile">スマホ版</a> へ（スマホ版は <strong>LINEスタンプメーカー（公式アプリ）</strong> の切り抜き機能で透過します）。自動透過がうまくいかない時は、Canva・Photoshop・remove.bg などで透過した画像をアップしてもOK。
-          </p>
         </div>
+
       </section>
 
       {/* フレーム拡大モーダル */}

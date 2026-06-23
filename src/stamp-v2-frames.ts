@@ -12,7 +12,7 @@ export type PetKindOrNone = PetKind | null;
 export interface PromptInput {
   petKind: PetKindOrNone;
   petKindOther: string; // petKind === "その他" のときの自由記述
-  features: string;
+  stampTexts?: string[];
 }
 
 export interface FrameDesign {
@@ -62,9 +62,7 @@ function petBlock(input: PromptInput, g: GridSize) {
   const lines: string[] = [];
   lines.push(`【主役】添付画像と同一個体として描く。`);
   lines.push(`動物の種類は必ず「${kind}」として描いてください。種類を別の動物に変えないこと。`);
-  if (input.features.trim()) {
-    lines.push(`特徴：${input.features.trim()}。これらをすべての${n}コマで一貫させる。`);
-  }
+  lines.push(`毛色・柄・耳の形・目・体型などの特徴は、添付画像から読み取り、すべての${n}コマで一貫させる。`);
   lines.push(`顔立ち・目・耳・毛色・模様・体型を${n}枚すべてで統一し、同じ子に見えるように描く。`);
   lines.push(`人間のような5本指にはせず、その動物らしい前足で描く。`);
   return lines.join("\n");
@@ -137,6 +135,65 @@ const COMMON_TEXT_INSTRUCTIONS_9 = `【文字入れ（必須）】
 8 応援「がんばれ！」
 9 おすまし（文字なし・タブ画像にも使える落ち着いた表情）`;
 
+const DEFAULT_STAMP_TEXT_ITEMS = [
+  ["にっこり", "こんにちは"],
+  ["ありがとう", "ありがとう"],
+  ["OKサイン", "OK!"],
+  ["おじぎ", "よろしく"],
+  ["うれしい", "うれしい！"],
+  ["ハート", "すき♡"],
+  ["おやすみ", "おやすみ"],
+  ["応援", "がんばれ！"],
+  ["おすまし", "ふふっ"],
+  ["ごめん", "ごめんね"],
+  ["びっくり", "えっ！？"],
+  ["しょんぼり", "しゅん…"],
+  ["手振る", "バイバイ"],
+  ["お祝い", "おめでとう"],
+  ["きらきら", "やったー！"],
+  ["怒り", "ぷんぷん"],
+  ["眠い", "ねむい"],
+  ["ごはん", "ごはん？"],
+  ["お散歩", "いこっ"],
+  ["待ってる", "まってる"],
+  ["いいね", "いいね"],
+  ["泣き顔", "えーん"],
+  ["照れ顔", "てへ"],
+  ["お願い", "お願い"],
+  ["またね", "またね"],
+] as const;
+
+const NO_TEXT_MARKERS = new Set(["文字なし", "なし", "無し", "(文字なし)", "（文字なし）", "-"]);
+
+export function getDefaultStampTextLines(g: GridSize): string[] {
+  const lines = DEFAULT_STAMP_TEXT_ITEMS.slice(0, cellCount(g)).map(([, text]) => text);
+  if (g === 3) lines[8] = "文字なし";
+  return lines;
+}
+
+function normalizeStampTextForPrompt(text: string | undefined): string {
+  const value = (text ?? "").trim();
+  return NO_TEXT_MARKERS.has(value) ? "" : value;
+}
+
+function hasCustomStampTexts(input: PromptInput, g: GridSize): boolean {
+  const defaults = getDefaultStampTextLines(g);
+  const supplied = input.stampTexts;
+  if (!supplied || supplied.length === 0) return false;
+  return defaults.some((fallback, index) => (supplied[index] ?? fallback).trim() !== fallback);
+}
+
+function stampTextRows(input: PromptInput, g: GridSize): Array<{ pose: string; text: string }> {
+  const defaults = getDefaultStampTextLines(g);
+  return DEFAULT_STAMP_TEXT_ITEMS.slice(0, cellCount(g)).map(([pose], index) => {
+    const fallback = defaults[index] ?? "";
+    return {
+      pose,
+      text: normalizeStampTextForPrompt(input.stampTexts?.[index] ?? fallback),
+    };
+  });
+}
+
 function commonPoses(g: GridSize): string {
   if (g === 3) return COMMON_POSES_9;
   if (g === 4) return COMMON_POSES_16;
@@ -169,44 +226,24 @@ function commonPoses(g: GridSize): string {
   ].slice(0, cellCount(g));
   return `【内容（各枠1ポーズ）】\n${items.map((item, i) => `${i + 1} ${item}`).join("、")}。\n各感情に合わせた小さなアイコン（ハート、きらきら、汗、音符、星、紙吹雪、肉球マークなど）も枠の中に収める。`;
 }
-function commonTextInstructions(g: GridSize): string {
-  if (g === 3) return COMMON_TEXT_INSTRUCTIONS_9;
-  if (g === 4) return COMMON_TEXT_INSTRUCTIONS_16;
-  const labels = [
-    ["にっこり", "こんにちは"],
-    ["ありがとう", "ありがとう"],
-    ["OKサイン", "OK!"],
-    ["おじぎ", "よろしく"],
-    ["うれしい", "うれしい！"],
-    ["ハート", "すき♡"],
-    ["おやすみ", "おやすみ"],
-    ["応援", "がんばれ！"],
-    ["おすまし", "ふふっ"],
-    ["ごめん", "ごめんね"],
-    ["びっくり", "えっ！？"],
-    ["しょんぼり", "しゅん…"],
-    ["手振る", "バイバイ"],
-    ["お祝い", "おめでとう"],
-    ["きらきら", "やったー！"],
-    ["怒り", "ぷんぷん"],
-    ["眠い", "ねむい"],
-    ["ごはん", "ごはん？"],
-    ["お散歩", "いこっ"],
-    ["待ってる", "まってる"],
-    ["いいね", "いいね"],
-    ["泣き顔", "えーん"],
-    ["照れ顔", "てへ"],
-    ["お願い", "お願い"],
-    ["またね", "またね"],
-  ].slice(0, cellCount(g));
+function commonTextInstructions(g: GridSize, input: PromptInput): string {
+  if (!hasCustomStampTexts(input, g)) {
+    if (g === 3) return COMMON_TEXT_INSTRUCTIONS_9;
+    if (g === 4) return COMMON_TEXT_INSTRUCTIONS_16;
+  }
+  const rows = stampTextRows(input, g);
   return `【文字入れ（必須）】
 各マスに日本語テキストを1個ずつ入れる。文字も被写体も、必ず各マスの枠内に完全に収める。
 文字は手書き風、またはポップで丸い書体。白またはクリーム色を基本に、白フチと、外側に枠色より濃い影を付けて立体感を出す。
 文字は被写体の顔・目に重ねない。頭上、足元、左右の空きスペースなど、表情を邪魔しない位置に置く。
 日本語は読みやすく、誤字・崩れ文字・意味不明な文字を入れない。指定した文字以外の文字、番号、ロゴ、透かしは入れない。
+長いセリフは崩れやすいため、短い言葉を優先する。長文を入れたい場合は、画像生成後に編集ツールで後入れする。
 
 【${cellCount(g)}コマの表情とテキスト】
-${labels.map(([pose, text], i) => `${i + 1} ${pose}「${text}」`).join("\n")}`;
+${rows.map(({ pose, text }, i) => {
+  if (!text) return `${i + 1} ${pose}（文字なし・タブ画像や予備として使える落ち着いた表情）`;
+  return `${i + 1} ${pose}「${text}」`;
+}).join("\n")}`;
 }
 function commonTextException(g: GridSize): string {
   const n = cellCount(g);
@@ -249,7 +286,7 @@ ${commonGrid(g)}
 
 ${commonPoses(g)}
 
-${commonTextInstructions(g)}
+${commonTextInstructions(g, input)}
 
 ${bg}
 

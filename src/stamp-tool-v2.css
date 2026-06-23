@@ -189,8 +189,8 @@
 .v2-design-room {
   display: grid;
   grid-template-columns: 1fr 460px;
-  gap: 24px;
-  padding: 20px 24px;
+  gap: 20px;
+  padding: 16px 20px;
   height: 100%;
   min-height: 0;
 }
@@ -204,9 +204,20 @@
   background: var(--v2-paper);
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-shadow);
-  padding: 20px 20px 16px;
-  overflow-y: auto;
+  padding: 16px 18px 14px;
   min-height: 0;
+}
+.v2-design-left {
+  overflow-y: auto;
+}
+.v2-design-right {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: visible;
+}
+.v2-design-right .v2-section-head {
+  margin-bottom: 8px;
 }
 
 /* セクションタイトル */
@@ -631,10 +642,20 @@
   gap: 10px;
   margin-bottom: 12px;
 }
+.v2-design-right .v2-form {
+  gap: 6px;
+  margin-bottom: 4px;
+}
 .v2-form-row {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+.v2-form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 .v2-form-label {
   display: flex;
@@ -681,10 +702,34 @@
   min-height: 54px;
   line-height: 1.55;
 }
+.v2-stamp-textarea {
+  min-height: 78px;
+  max-height: 78px;
+  resize: none;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.v2-text-reset {
+  border: 1px solid var(--v2-line);
+  background: #fff;
+  color: var(--v2-pink);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.v2-text-reset:hover {
+  border-color: var(--v2-pink);
+}
 .v2-form-radios {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+.v2-design-right .v2-form-radios {
+  gap: 6px;
 }
 .v2-form-radio {
   display: inline-flex;
@@ -698,6 +743,10 @@
   font-weight: 700;
   color: var(--v2-muted);
   cursor: pointer;
+}
+.v2-design-right .v2-form-radio {
+  padding: 5px 10px;
+  font-size: 11.5px;
 }
 .v2-form-radio input { display: none; }
 .v2-form-radio.is-checked {
@@ -716,10 +765,10 @@
   background: #fffaf3;
   border: 1.5px dashed #f3c8aa;
   border-radius: var(--v2-radius-sm);
-  padding: 12px 14px;
+  padding: 9px 11px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
 }
 .v2-prompt-out-head {
   display: flex;
@@ -774,7 +823,8 @@
 }
 .v2-prompt-preview-toggle:hover { text-decoration: underline; }
 .v2-prompt-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
   gap: 8px;
 }
 .v2-btn-copy {
@@ -783,12 +833,12 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 14px 16px;
+  padding: 10px 12px;
   border-radius: 12px;
   border: none;
   background: var(--v2-accent);
   color: #fff;
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 900;
   cursor: pointer;
   transition: transform .12s, box-shadow .15s;
@@ -798,6 +848,12 @@
 .v2-btn-copy.is-copied {
   background: #4ec98c;
   box-shadow: 0 6px 16px rgba(78, 201, 140, 0.22);
+}
+.v2-btn-copy.is-secondary {
+  background: #fff;
+  color: var(--v2-pink);
+  border: 1.5px solid #f4c6dc;
+  box-shadow: none;
 }
 .v2-btn-ghost {
   display: inline-flex;
