@@ -251,19 +251,6 @@ export default function Step2ReorderEdit(props: Props) {
         <div className="v2-edit-card" style={{ marginBottom: 0 }}>
           <div className="v2-edit-card-title">
             <span>選択画像の位置 <strong style={{ color: "#c25b1f" }}>{safeSelectedIndex + 1}番</strong></span>
-            <div className="v2-bg-picker" role="group" aria-label="背景色プレビュー">
-              <span className="v2-bg-picker-label">背景</span>
-              {BG_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  className={`v2-bg-swatch ${opt.cls}${bgPreview === opt.value ? " is-active" : ""}`}
-                  onClick={() => setBgPreview(opt.value)}
-                  aria-label={opt.label}
-                  title={opt.label}
-                />
-              ))}
-            </div>
           </div>
 
           <div
