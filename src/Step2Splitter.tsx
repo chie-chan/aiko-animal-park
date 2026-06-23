@@ -68,28 +68,6 @@ export default function Step2Splitter(props: Props) {
     onChangeGridSize,
   } = props;
 
-  // グリッドサイズトグル（共通レンダー）
-  function renderGridSizeToggle(extraClass = "") {
-    if (!onChangeGridSize) return null;
-    const sizes: GridSize[] = [1, 2, 3, 4, 5];
-    return (
-      <div className={`v2-gridsize-toggle ${extraClass}`} role="group" aria-label="グリッドサイズ切替">
-        {sizes.map((size) => (
-          <button
-            key={size}
-            type="button"
-            className={`v2-gridsize-btn${gridSize === size ? " is-active" : ""}`}
-            onClick={() => onChangeGridSize(size)}
-            title={`${size}×${size}=${size * size}コマ`}
-          >
-            {size}×{size}
-            <span className="v2-gridsize-sub">{size * size}コマ</span>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
   function renderGridSizeSlider() {
     if (!onChangeGridSize) return null;
     const sizes: GridSize[] = [1, 2, 3, 4, 5];
@@ -743,49 +721,69 @@ export default function Step2Splitter(props: Props) {
           </div>
         </section>
 
-        {/* RIGHT: 分割線の微調整（サブ） */}
+        {/* RIGHT: 分割と背景の操作（普段は省スペース） */}
         <section className="v2-split-right">
           <h4 className="v2-adjust-title">分割と背景の調整</h4>
-          <p className="v2-adjust-sub">境界線、背景削除、セル内の写り込みをここで整えます。普通はそのままで大丈夫。</p>
-
-          <div
-            ref={adjustPreviewRef}
-            className={`v2-adjust-preview${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
-            onPointerDown={handlePreviewPointerDown}
-            onPointerMove={handlePreviewPointerMove}
-            onPointerUp={handlePreviewPointerUp}
-            onPointerCancel={handlePreviewPointerUp}
-          >
-            <img src={sheetSrc} alt="" draggable={false} />
-            {vLines.map((pct, i) => (
-              <button
-                key={`v-${i}`}
-                type="button"
-                className="v2-sheet-line vertical"
-                style={{ left: `${pct}%` }}
-                aria-label={`縦の分割線 ${i + 1}本目`}
-                onPointerDown={(e) => startDrag(e, "vertical", i)}
-              />
-            ))}
-            {hLines.map((pct, i) => (
-              <button
-                key={`h-${i}`}
-                type="button"
-                className="v2-sheet-line horizontal"
-                style={{ top: `${pct}%` }}
-                aria-label={`横の分割線 ${i + 1}本目`}
-                onPointerDown={(e) => startDrag(e, "horizontal", i)}
-              />
-            ))}
-          </div>
+          <p className="v2-adjust-sub">通常はグリッドサイズと自動背景削除だけで進めます。細かい手動調整は必要な時だけ開けます。</p>
 
           {/* グリッドサイズ切替 */}
           {onChangeGridSize && (
-            <div className="v2-adjust-gridsize">
-              <span className="v2-adjust-gridsize-label">グリッド</span>
-              {renderGridSizeToggle("v2-gridsize-toggle-inline")}
+            <div className="v2-adjust-gridbar">
+              {renderGridSizeSlider()}
             </div>
           )}
+
+          <details className="v2-adjust-advanced">
+            <summary>分割線・セル余白・手動削除を調整</summary>
+            <div
+              ref={adjustPreviewRef}
+              className={`v2-adjust-preview${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
+              onPointerDown={handlePreviewPointerDown}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerUp}
+              onPointerCancel={handlePreviewPointerUp}
+            >
+              <img src={sheetSrc} alt="" draggable={false} />
+              {vLines.map((pct, i) => (
+                <button
+                  key={`v-${i}`}
+                  type="button"
+                  className="v2-sheet-line vertical"
+                  style={{ left: `${pct}%` }}
+                  aria-label={`縦の分割線 ${i + 1}本目`}
+                  onPointerDown={(e) => startDrag(e, "vertical", i)}
+                />
+              ))}
+              {hLines.map((pct, i) => (
+                <button
+                  key={`h-${i}`}
+                  type="button"
+                  className="v2-sheet-line horizontal"
+                  style={{ top: `${pct}%` }}
+                  aria-label={`横の分割線 ${i + 1}本目`}
+                  onPointerDown={(e) => startDrag(e, "horizontal", i)}
+                />
+              ))}
+            </div>
+            <p>分割線は画像上でドラッグできます。色クリックと消しゴムも、この画像上で操作します。</p>
+            <div className="v2-trim-gutter-card">
+              <div className="v2-trim-gutter-head">
+                <span>セル内をすこし内側へ</span>
+                <span><strong>{trimGutter.toFixed(1)}%</strong></span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={8}
+                step={0.25}
+                value={trimGutter}
+                onChange={(e) => setTrimGutter(Number(e.target.value))}
+                onPointerUp={() => sheetSrc && regenerateCells(sheetSrc)}
+                onMouseUp={() => sheetSrc && regenerateCells(sheetSrc)}
+              />
+              <p>隣のセルがちょっと写り込むときだけ上げます。普段は 0% でOK。</p>
+            </div>
+          </details>
 
           {/* 背景削除ツール */}
           <div className="v2-bg-tool-card">
@@ -852,7 +850,7 @@ export default function Step2Splitter(props: Props) {
                 >
                   この色でもう一度削除
                 </button>
-                <p>プレビュー上の消したい背景色をクリック。似た色の範囲は許容値で調整できます。</p>
+                <p>上の詳細欄を開いて、画像上の消したい背景色をクリックします。似た色の範囲は許容値で調整できます。</p>
               </div>
             )}
 
@@ -869,38 +867,9 @@ export default function Step2Splitter(props: Props) {
                     onChange={(e) => setEraseRadius(Number(e.target.value))}
                   />
                 </label>
-                <p>プレビュー上をなぞると、その部分だけ手動で透明になります。</p>
+                <p>上の詳細欄を開いて画像上をなぞると、その部分だけ手動で透明になります。</p>
               </div>
             )}
-          </div>
-
-          {/* セル内余白の微調整 */}
-          <div style={{
-            background: "#fffaf3",
-            border: "1px dashed #f3c8aa",
-            borderRadius: 8,
-            padding: "10px 12px",
-            marginTop: 4,
-            fontSize: 11.5,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontWeight: 800, color: "#c25b1f" }}>
-              <span>セル内をすこし内側へ</span>
-              <span><strong>{trimGutter.toFixed(1)}%</strong></span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={8}
-              step={0.25}
-              value={trimGutter}
-              onChange={(e) => setTrimGutter(Number(e.target.value))}
-              onPointerUp={() => sheetSrc && regenerateCells(sheetSrc)}
-              onMouseUp={() => sheetSrc && regenerateCells(sheetSrc)}
-              style={{ width: "100%", accentColor: "#c25b1f" }}
-            />
-            <p style={{ margin: "4px 0 0", fontSize: 10.5, color: "var(--v2-muted)", lineHeight: 1.5 }}>
-              隣のセルがちょっと写り込んでしまうときに上げる。普段は 0% でOK。
-            </p>
           </div>
 
           <div className="v2-split-actions">

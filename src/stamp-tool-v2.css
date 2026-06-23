@@ -1279,6 +1279,96 @@
 .v2-adjust-preview.is-erasing {
   cursor: cell;
 }
+.v2-adjust-gridbar {
+  padding: 10px 12px 11px;
+  margin-bottom: 10px;
+  background: #fff;
+  border: 1.5px solid var(--v2-line);
+  border-radius: 10px;
+}
+.v2-adjust-gridbar .v2-grid-slider-head strong {
+  font-size: 16px;
+}
+.v2-adjust-gridbar .v2-grid-slider-ticks small {
+  display: none;
+}
+.v2-adjust-advanced {
+  margin: 8px 0 8px;
+  padding: 0;
+  border: 1.5px dashed var(--v2-line);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.v2-adjust-advanced summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  color: var(--v2-purple);
+  font-size: 11.5px;
+  font-weight: 900;
+  cursor: pointer;
+  list-style: none;
+}
+.v2-adjust-advanced summary::-webkit-details-marker {
+  display: none;
+}
+.v2-adjust-advanced summary::after {
+  content: "+";
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #f9efff;
+  color: var(--v2-pink);
+  font-size: 14px;
+  line-height: 1;
+}
+.v2-adjust-advanced[open] summary::after {
+  content: "-";
+}
+.v2-adjust-advanced .v2-adjust-preview {
+  width: calc(100% - 20px);
+  margin: 0 10px 8px;
+}
+.v2-adjust-advanced p {
+  margin: 0;
+  padding: 0 10px 10px;
+  color: var(--v2-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.v2-trim-gutter-card {
+  margin: 0 10px 10px;
+  padding: 9px 10px;
+  border: 1px dashed #f3c8aa;
+  border-radius: 8px;
+  background: #fffaf3;
+}
+.v2-trim-gutter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  color: #c25b1f;
+  font-size: 11px;
+  font-weight: 900;
+}
+.v2-trim-gutter-card input {
+  width: 100%;
+  accent-color: #c25b1f;
+}
+.v2-trim-gutter-card p {
+  margin: 4px 0 0;
+  padding: 0;
+  color: var(--v2-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
 .v2-adjust-readout {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3825,52 +3915,6 @@
   }
 }
 
-/* ── グリッドサイズ切替トグル（4×4 / 3×3） ──────────────── */
-.v2-gridsize-toggle {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1.5px solid var(--v2-line);
-  border-radius: 10px;
-  overflow: hidden;
-  background: #fff;
-  margin-right: 6px;
-}
-.v2-gridsize-btn {
-  border: none;
-  background: #fff;
-  color: var(--v2-muted);
-  padding: 4px 10px 5px;
-  font-size: 11.5px;
-  font-weight: 900;
-  cursor: pointer;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  line-height: 1.1;
-  transition: background 0.15s, color 0.15s;
-}
-.v2-gridsize-btn:not(:last-child) {
-  border-right: 1px solid var(--v2-line);
-}
-.v2-gridsize-btn:hover:not(:disabled) {
-  background: #fff5fa;
-  color: var(--v2-ink);
-}
-.v2-gridsize-btn.is-active {
-  background: linear-gradient(135deg, #f7a8c8, #b89bea);
-  color: #fff;
-}
-.v2-gridsize-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.v2-gridsize-sub {
-  font-size: 9.5px;
-  font-weight: 700;
-  opacity: 0.85;
-}
-
 /* ── デバイス切替リンク ──────────── */
 .v2-topbar-switch {
   display: inline-flex;
@@ -3891,50 +3935,6 @@
 .v2-topbar-switch:hover {
   background: linear-gradient(135deg, #fff5fa, #f0e8fb);
   color: var(--v2-pink);
-}
-
-/* ── インライン版グリッドサイズトグル（デザインルーム/Step1内） ──────── */
-.v2-gridsize-toggle.v2-gridsize-toggle-inline {
-  margin-right: 0;
-}
-.v2-drop-gridsize-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  background: linear-gradient(135deg, #fff5fa, #fde6ef);
-  border: 1.5px solid var(--v2-pink-soft);
-  border-radius: 12px;
-  margin-bottom: 12px;
-}
-.v2-drop-gridsize-label {
-  font-size: 13px;
-  font-weight: 900;
-  color: var(--v2-ink);
-}
-.v2-drop-gridsize-hint {
-  flex: 1 1 auto;
-  font-size: 11.5px;
-  color: var(--v2-muted);
-  font-weight: 700;
-  line-height: 1.5;
-  min-width: 200px;
-}
-.v2-adjust-gridsize {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 0 4px;
-  padding: 8px 10px;
-  background: #fff;
-  border: 1.5px solid var(--v2-line);
-  border-radius: 10px;
-}
-.v2-adjust-gridsize-label {
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--v2-ink);
 }
 
 /* ── デザインルーム内のグリッドサイズラジオ（犬・猫ボタンと同じ丸型） ── */
