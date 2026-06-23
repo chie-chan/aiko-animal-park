@@ -172,7 +172,6 @@ export default function Step2Splitter(props: Props) {
   const [trimGutter, setTrimGutter] = useState<number>(0);
   // 白背景を自動透過するか（既定ON）。rawSrc=透過前の元画像を保持し、トグルで再生成する。
   const [bgTransparent, setBgTransparent] = useState<boolean>(true);
-  const [batchTransparent, setBatchTransparent] = useState<boolean>(true);
   const [rawSrc, setRawSrc] = useState<string | null>(null);
   const [processing, setProcessing] = useState<boolean>(false);
   const [bgTool, setBgTool] = useState<BgTool>("auto");
@@ -427,11 +426,10 @@ export default function Step2Splitter(props: Props) {
         const file = limited[i];
         setBatchProgress(`${i + 1} / ${limited.length} 枚を処理中…`);
         const src = await readFileAsDataUrl(file);
-        const out = batchTransparent ? await makeImageTransparent(src) : src;
         cells.push({
           id: `batch-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: file.name || `stamp_${String(i + 1).padStart(2, "0")}.png`,
-          src: out,
+          src,
         });
       }
       setSplitCells(cells);
@@ -657,15 +655,6 @@ export default function Step2Splitter(props: Props) {
                 <strong>完成済み画像を一括取り込み</strong>
                 <span>1枚ずつ作った画像をまとめて整えます</span>
               </button>
-              <label className="v2-batch-transparent-toggle">
-                <input
-                  type="checkbox"
-                  checked={batchTransparent}
-                  disabled={processing}
-                  onChange={(event) => setBatchTransparent(event.target.checked)}
-                />
-                <span>完成画像も白背景を透過して取り込む</span>
-              </label>
             </section>
           </div>
 

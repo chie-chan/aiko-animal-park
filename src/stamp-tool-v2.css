@@ -1461,21 +1461,6 @@
   background: linear-gradient(135deg, #f9fdff, #fff6fb);
   border-style: solid;
 }
-.v2-batch-transparent-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  align-self: flex-start;
-  color: var(--v2-ink);
-  font-size: 11.5px;
-  font-weight: 900;
-  cursor: pointer;
-}
-.v2-batch-transparent-toggle input {
-  width: 16px;
-  height: 16px;
-  accent-color: #b89bea;
-}
 .v2-batch-drop-zone:disabled {
   opacity: .55;
   cursor: wait;
