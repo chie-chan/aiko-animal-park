@@ -596,12 +596,6 @@ export default function Step2Splitter(props: Props) {
               <strong>素材の入口を選ぶ</strong>
               <span>シート分割と完成済み画像の一括取り込みを分けました。</span>
             </div>
-            <div className="v2-intake-chips" aria-label="対応作業">
-              <span>1×1〜5×5</span>
-              <span>40枚一括</span>
-              <span>背景削除</span>
-              <span>LINE用ZIP</span>
-            </div>
           </div>
 
           <div className="v2-intake-options">

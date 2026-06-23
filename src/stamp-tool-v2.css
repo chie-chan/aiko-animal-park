@@ -1034,24 +1034,6 @@
   font-size: 11.5px;
   font-weight: 700;
 }
-.v2-intake-chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-}
-.v2-intake-chips span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.82);
-  border: 1px solid rgba(141, 107, 223, .2);
-  color: #5b3aa0;
-  font-size: 10.5px;
-  font-weight: 900;
-}
 .v2-grid-slider-card {
   display: grid;
   gap: 7px;
@@ -1575,9 +1557,6 @@
   .v2-intake-head {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .v2-intake-chips {
-    justify-content: flex-start;
   }
   .v2-intake-options {
     grid-template-columns: 1fr;
