@@ -6,6 +6,7 @@ import Step2Splitter from "./Step2Splitter";
 import Step2ReorderEdit from "./Step2ReorderEdit";
 import Step3Export from "./Step3Export";
 import { centerImageContent, defaultCuts, type CellOffset, type GridSize, type SourceImage } from "./stamp-v2-split";
+import { trackStampEvent } from "./stamp-v2-analytics";
 
 const MASCOT_TIPS: Record<number, string[]> = {
   1: [
@@ -92,6 +93,11 @@ export default function StampToolV2() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2200);
     }
+    trackStampEvent("prompt_copy", {
+      frame: selectedFrameId,
+      gridSize,
+      petKind: petKind ?? "none",
+    });
   }
 
   // ── Step 1（Splitter）の state ─────────────────────
@@ -164,6 +170,18 @@ export default function StampToolV2() {
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
   const [bgPreview, setBgPreview] = useState<BgPreview>("checker");
 
+  useEffect(() => {
+    trackStampEvent("page_view", { tool: "stamp-v2" });
+  }, []);
+
+  useEffect(() => {
+    trackStampEvent("step_view", {
+      step,
+      intakeMode: intakeMode ?? "none",
+      cellCount: splitCells.length,
+    });
+  }, [step, intakeMode, splitCells.length]);
+
   function nextStepForCurrent(): StepId | null {
     if (step === 1) return intakeMode === "batch" ? 3 : 2;
     if (step === 2) return 3;
@@ -208,6 +226,12 @@ export default function StampToolV2() {
   }
 
   function handleImportComplete(mode: "sheet" | "batch") {
+    trackStampEvent("import_complete", {
+      mode,
+      cols: splitGridCols,
+      rows: splitGridRows,
+      cellCount: splitCells.length,
+    });
     setStep(mode === "batch" ? 3 : 2);
   }
 
@@ -221,6 +245,7 @@ export default function StampToolV2() {
   }
 
   function openDesignRoomWithGuide() {
+    trackStampEvent("prompt_room_open", { source: "topbar" });
     setShowStartSpotlight(false);
     setShowDesignRoom(true);
     setDesignRoomGuideStep(1);

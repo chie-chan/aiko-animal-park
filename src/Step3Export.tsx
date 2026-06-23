@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import { useEffect, useState } from "react";
 import { type CellOffset, type GridSize, type SourceImage, renderCellToSize } from "./stamp-v2-split";
 import type { BgPreview } from "./StampToolV2";
+import { trackStampEvent } from "./stamp-v2-analytics";
 
 interface Props {
   splitCells: SourceImage[];
@@ -128,6 +129,12 @@ export default function Step3Export(props: Props) {
 
   async function downloadZip() {
     if (!splitCells.length || busy) return;
+    trackStampEvent("export_zip", {
+      preset: preset.id,
+      cellCount: splitCells.length,
+      width: preset.width,
+      height: preset.height,
+    });
     setBusy(true);
     setMessage("");
 

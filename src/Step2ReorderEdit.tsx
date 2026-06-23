@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CellOffset, GridSize, SourceImage } from "./stamp-v2-split";
 import type { BgPreview } from "./StampToolV2";
+import { trackStampEvent } from "./stamp-v2-analytics";
 
 // ======================================================================
 // Step2ReorderEdit ―  並び替え＋選択中セルの位置微調整
@@ -119,6 +120,7 @@ export default function Step2ReorderEdit(props: Props) {
     next.splice(index, 0, moved);
     setSplitCells(next);
     setSelectedIndex(index);
+    trackStampEvent("placement_reorder", { from: draggingIndex + 1, to: index + 1, cellCount: splitCells.length });
     setDraggingIndex(null);
     setOverIndex(null);
   }
@@ -157,10 +159,12 @@ export default function Step2ReorderEdit(props: Props) {
     if (!selectedCell) return;
     const o = offsetFor(selectedCell.id);
     setOffsetFor(selectedCell.id, { dx: o.dx + dx, dy: o.dy + dy, scale: o.scale });
+    trackStampEvent("placement_nudge", { directionX: dx, directionY: dy });
   }
   function resetOffset() {
     if (!selectedCell) return;
     setOffsetFor(selectedCell.id, { dx: 0, dy: 0, scale: 1 });
+    trackStampEvent("placement_reset");
   }
   function setScale(scale: number) {
     if (!selectedCell) return;
@@ -171,6 +175,7 @@ export default function Step2ReorderEdit(props: Props) {
     if (!selectedCell) return;
     const o = offsetFor(selectedCell.id);
     setOffsetFor(selectedCell.id, { ...o, scale: (o.scale ?? 1) + delta });
+    trackStampEvent("placement_zoom", { delta });
   }
 
   if (!splitCells.length) {

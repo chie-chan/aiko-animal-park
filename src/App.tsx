@@ -7,6 +7,7 @@ import OrderPage from "./OrderPage";
 import StyleZukanPage from "./StyleZukanPage";
 import CandidateStudioPage from "./CandidateStudioPage";
 import ThreadsPresentPage from "./ThreadsPresentPage";
+import StampAnalyticsAdmin from "./StampAnalyticsAdmin";
 
 const NOTE_HOME_URL = "https://note.com/aiko_animal";
 
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="/styles" element={<Navigate to="/style-zukan" replace />} />
         <Route path="/stamp" element={<Navigate to="/stamp-v2" replace />} />
         <Route path="/stamp-v2" element={<StampToolV2 />} />
+        <Route path="/stamp-v2-admin" element={<StampAnalyticsAdmin />} />
         <Route path="/stamp-mobile" element={<StampToolMobile />} />
         <Route path="*" element={<Navigate to="/gallery?tab=catalog" replace />} />
       </Routes>

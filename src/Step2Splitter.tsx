@@ -14,6 +14,7 @@ import {
   safeCuts,
   splitSheetImage,
 } from "./stamp-v2-split";
+import { trackStampEvent } from "./stamp-v2-analytics";
 
 // ======================================================================
 // Step2Splitter ―  シートをセルに分割（ライブプレビュー＋クリック拡大）
@@ -346,6 +347,10 @@ export default function Step2Splitter(props: Props) {
   async function runAutoTransparency(source = getAutoTransparencySource()) {
     if (!source) return;
     const editingBatch = batchEditIndexRef.current !== null;
+    trackStampEvent("background_auto", {
+      target: editingBatch ? "batch-cell" : "sheet",
+      tolerance: bgTolerance,
+    });
     if (!editingBatch) setBgTransparent(true);
     setProcessing(true);
     setMessage("背景を透過しています…");
@@ -366,6 +371,10 @@ export default function Step2Splitter(props: Props) {
   async function runColorTransparency(color = pickedColor, source = getActiveEditSource()) {
     if (!source || !color) return;
     const editingBatch = batchEditIndexRef.current !== null;
+    trackStampEvent("background_color", {
+      target: editingBatch ? "batch-cell" : "sheet",
+      tolerance: bgTolerance,
+    });
     pushBgUndo(createActiveUndoSnapshot(source));
     if (!editingBatch) setBgTransparent(true);
     setProcessing(true);
@@ -570,6 +579,7 @@ export default function Step2Splitter(props: Props) {
 
   async function runBatchTransparency() {
     if (!splitCells.length || processing) return;
+    trackStampEvent("background_batch_auto", { cellCount: splitCells.length });
     setProcessing(true);
     setBatchProgress(`0 / ${splitCells.length} 枚を透過中…`);
     setMessage("");
@@ -595,6 +605,10 @@ export default function Step2Splitter(props: Props) {
 
   async function runBatchColorTransparency(color = pickedColor) {
     if (!splitCells.length || !color || processing) return;
+    trackStampEvent("background_batch_color", {
+      cellCount: splitCells.length,
+      tolerance: bgTolerance,
+    });
     pushBgUndo({ kind: "batch-all", cells: splitCellsRef.current.map((cell) => ({ ...cell })) });
     setProcessing(true);
     setBatchProgress(`0 / ${splitCells.length} 枚を色指定で透過中…`);
@@ -667,6 +681,12 @@ export default function Step2Splitter(props: Props) {
     if (bgTool === "eraser") {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
+      if (!erasing) {
+        trackStampEvent("background_eraser", {
+          target: batchEditIndexRef.current !== null ? "batch-cell" : "sheet",
+          radius: eraseRadius,
+        });
+      }
       setErasing(true);
       queueErase(event);
     }
