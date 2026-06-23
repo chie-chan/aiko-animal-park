@@ -4,16 +4,20 @@ import {
   type SourceImage,
   clamp,
   defaultCuts,
+  eraseImageAtPoints,
+  type EraseStroke,
   linePosition,
   makeImageTransparent,
+  pickImageColor,
   readFileAsDataUrl,
+  type RgbColor,
   safeCuts,
   splitSheetImage,
 } from "./stamp-v2-split";
 
 // ======================================================================
 // Step2Splitter ―  シートをセルに分割（ライブプレビュー＋クリック拡大）
-// gridSize=4 → 4×4=16セル、gridSize=3 → 3×3=9セル。両方に対応。
+// gridSize=1〜5 に対応。
 // 白背景のPNGをアップロードすると白い背景を自動で透過（縁フラッドフィル）→分割する。透過済みPNGならトグルOFFでそのまま使える。
 // ======================================================================
 
@@ -31,6 +35,7 @@ interface Props {
 }
 
 type DragAxis = "vertical" | "horizontal";
+type BgTool = "auto" | "color" | "eraser";
 
 const OUTER_PADDING = 0;
 
@@ -65,26 +70,21 @@ export default function Step2Splitter(props: Props) {
   // グリッドサイズトグル（共通レンダー）
   function renderGridSizeToggle(extraClass = "") {
     if (!onChangeGridSize) return null;
+    const sizes: GridSize[] = [1, 2, 3, 4, 5];
     return (
       <div className={`v2-gridsize-toggle ${extraClass}`} role="group" aria-label="グリッドサイズ切替">
-        <button
-          type="button"
-          className={`v2-gridsize-btn${gridSize === 3 ? " is-active" : ""}`}
-          onClick={() => onChangeGridSize(3)}
-          title="3×3=9コマ"
-        >
-          3×3
-          <span className="v2-gridsize-sub">9コマ</span>
-        </button>
-        <button
-          type="button"
-          className={`v2-gridsize-btn${gridSize === 4 ? " is-active" : ""}`}
-          onClick={() => onChangeGridSize(4)}
-          title="4×4=16コマ"
-        >
-          4×4
-          <span className="v2-gridsize-sub">16コマ</span>
-        </button>
+        {sizes.map((size) => (
+          <button
+            key={size}
+            type="button"
+            className={`v2-gridsize-btn${gridSize === size ? " is-active" : ""}`}
+            onClick={() => onChangeGridSize(size)}
+            title={`${size}×${size}=${size * size}コマ`}
+          >
+            {size}×{size}
+            <span className="v2-gridsize-sub">{size * size}コマ</span>
+          </button>
+        ))}
       </div>
     );
   }
@@ -122,7 +122,11 @@ export default function Step2Splitter(props: Props) {
   const cellCount = gridSize * gridSize;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const adjustPreviewRef = useRef<HTMLDivElement>(null);
+  const eraseSourceRef = useRef<string | null>(null);
+  const eraseQueueRef = useRef<EraseStroke[]>([]);
+  const eraseBusyRef = useRef(false);
   const [drag, setDrag] = useState<{ axis: DragAxis; index: number } | null>(null);
+  const [erasing, setErasing] = useState(false);
   const [zoomCell, setZoomCell] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [trimGutter, setTrimGutter] = useState<number>(0);
@@ -130,9 +134,17 @@ export default function Step2Splitter(props: Props) {
   const [bgTransparent, setBgTransparent] = useState<boolean>(true);
   const [rawSrc, setRawSrc] = useState<string | null>(null);
   const [processing, setProcessing] = useState<boolean>(false);
+  const [bgTool, setBgTool] = useState<BgTool>("auto");
+  const [bgTolerance, setBgTolerance] = useState<number>(24);
+  const [eraseRadius, setEraseRadius] = useState<number>(22);
+  const [pickedColor, setPickedColor] = useState<RgbColor | null>(null);
   // 分割プレビューの背景（透過確認用・市松/白/黒/桃/青）
   const [liveBg, setLiveBg] = useState<string>("checker");
   const liveBgCss = (LIVE_BGS.find((b) => b.key === liveBg) ?? LIVE_BGS[0]).css;
+
+  useEffect(() => {
+    eraseSourceRef.current = sheetSrc;
+  }, [sheetSrc]);
 
   // 取り込んだ画像に（必要なら）透過をかけて sheetSrc にセット
   async function applyUploadedSrc(url: string) {
@@ -178,6 +190,95 @@ export default function Step2Splitter(props: Props) {
     } finally {
       setProcessing(false);
     }
+  }
+
+  async function runAutoTransparency(source = rawSrc ?? sheetSrc) {
+    if (!source) return;
+    setBgTransparent(true);
+    setProcessing(true);
+    setMessage("背景を透過しています…");
+    try {
+      const out = await makeImageTransparent(source);
+      setSheetSrc(out);
+      setMessage("");
+    } catch (err) {
+      console.error(err);
+      setMessage("透過に失敗しました。別の方法で試してください。");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  async function runColorTransparency(color = pickedColor, source = rawSrc ?? sheetSrc) {
+    if (!source || !color) return;
+    setBgTransparent(true);
+    setProcessing(true);
+    setMessage("選んだ色の背景を透過しています…");
+    try {
+      const out = await makeImageTransparent(source, {
+        targetColor: color,
+        tolerance: bgTolerance,
+      });
+      setSheetSrc(out);
+      setMessage("");
+    } catch (err) {
+      console.error(err);
+      setMessage("色指定の透過に失敗しました。許容値を変えてもう一度試してください。");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  function pointFromPreview(event: React.PointerEvent) {
+    if (!adjustPreviewRef.current) return null;
+    const rect = adjustPreviewRef.current.getBoundingClientRect();
+    return {
+      x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+      y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
+    };
+  }
+
+  async function pickAndRemoveColor(event: React.PointerEvent) {
+    const point = pointFromPreview(event);
+    const source = rawSrc ?? sheetSrc;
+    if (!point || !source || processing) return;
+    const color = await pickImageColor(source, point.x, point.y);
+    if (!color) {
+      setMessage("色を読み取れませんでした。別の場所をクリックしてください。");
+      return;
+    }
+    setPickedColor(color);
+    await runColorTransparency(color, source);
+  }
+
+  async function flushEraseQueue() {
+    if (eraseBusyRef.current) return;
+    const source = eraseSourceRef.current;
+    const strokes = eraseQueueRef.current.splice(0);
+    if (!source || !strokes.length) return;
+    eraseBusyRef.current = true;
+    try {
+      const out = await eraseImageAtPoints(source, strokes);
+      eraseSourceRef.current = out;
+      setSheetSrc(out);
+    } catch (err) {
+      console.error(err);
+      setMessage("消しゴム処理に失敗しました。");
+    } finally {
+      eraseBusyRef.current = false;
+      if (eraseQueueRef.current.length) void flushEraseQueue();
+    }
+  }
+
+  function queueErase(event: React.PointerEvent) {
+    const point = pointFromPreview(event);
+    if (!point || !sheetSrc) return;
+    eraseQueueRef.current.push({
+      x: point.x,
+      y: point.y,
+      radius: eraseRadius,
+    });
+    void flushEraseQueue();
   }
 
   // ── 各列・行のサイズ（fr単位）を計算（プレビューグリッドの比率に使う） ──
@@ -291,6 +392,7 @@ export default function Step2Splitter(props: Props) {
   }
   function startDrag(event: React.PointerEvent, axis: DragAxis, index: number) {
     event.preventDefault();
+    event.stopPropagation();
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
     setDrag({ axis, index });
   }
@@ -311,6 +413,40 @@ export default function Step2Splitter(props: Props) {
       regenerateCells(sheetSrc);
     }
     setDrag(null);
+  }
+
+  function handlePreviewPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (bgTool === "color") {
+      event.preventDefault();
+      void pickAndRemoveColor(event);
+      return;
+    }
+    if (bgTool === "eraser") {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setErasing(true);
+      queueErase(event);
+    }
+  }
+
+  function handlePreviewPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (drag) {
+      handleDragMove(event);
+      return;
+    }
+    if (bgTool === "eraser" && erasing) {
+      event.preventDefault();
+      queueErase(event);
+    }
+  }
+
+  function handlePreviewPointerUp() {
+    if (erasing) {
+      setErasing(false);
+      const latest = eraseSourceRef.current ?? sheetSrc;
+      if (latest) regenerateCells(latest);
+    }
+    stopDrag();
   }
   function resetCuts() {
     const d = defaultCuts(gridSize);
@@ -380,7 +516,7 @@ export default function Step2Splitter(props: Props) {
                 ← こんなグリッド状のスタンプ画像をアップロード（白背景でもOK）
               </div>
               <p style={{ fontSize: 12, color: "var(--v2-muted)", lineHeight: 1.65, margin: "0 0 8px" }}>
-                AIで作った4×4（または3×3）のスタンプシート画像をアップロードしてください。
+                AIで作った1×1〜5×5のスタンプシート画像をアップロードしてください。
                 白い背景でもOK。「✨ 白い背景を自動で透過する」がONなら、白い背景を自動で透明にします（チェック柄＝透過された場所）。
               </p>
               <button
@@ -412,7 +548,7 @@ export default function Step2Splitter(props: Props) {
               <span className="v2-drop-gridsize-label">グリッドを選ぶ：</span>
               {renderGridSizeToggle("v2-gridsize-toggle-inline")}
               <span className="v2-drop-gridsize-hint">
-                LINEスタンプは8枚で1セット。3×3だと予備込みでちょうど良い枚数になります。
+                1枚確認から25枚セットまで対応。スタンプは8/16/24/32/40枚、絵文字は8〜40枚の素材作りに使えます。
               </span>
             </div>
           )}
@@ -516,10 +652,11 @@ export default function Step2Splitter(props: Props) {
 
           <div
             ref={adjustPreviewRef}
-            className="v2-adjust-preview"
-            onPointerMove={handleDragMove}
-            onPointerUp={stopDrag}
-            onPointerCancel={stopDrag}
+            className={`v2-adjust-preview${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
+            onPointerDown={handlePreviewPointerDown}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={handlePreviewPointerUp}
+            onPointerCancel={handlePreviewPointerUp}
           >
             <img src={sheetSrc} alt="" draggable={false} />
             {vLines.map((pct, i) => (
@@ -552,17 +689,91 @@ export default function Step2Splitter(props: Props) {
             </div>
           )}
 
-          {/* 白背景の自動透過 */}
-          <div style={{
-            display: "flex",
-            justifyContent: "center",
-            background: "#faf7ff",
-            border: "1px dashed #d8c8f3",
-            borderRadius: 8,
-            padding: "9px 12px",
-            margin: "8px 0 4px",
-          }}>
-            {renderTransparentToggle()}
+          {/* 背景削除ツール */}
+          <div className="v2-bg-tool-card">
+            <div className="v2-bg-tool-head">
+              <span>背景削除</span>
+              {pickedColor && (
+                <span
+                  className="v2-picked-color"
+                  title={`RGB(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})`}
+                  style={{ background: `rgb(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})` }}
+                />
+              )}
+            </div>
+            <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
+              {([
+                ["auto", "自動"],
+                ["color", "色クリック"],
+                ["eraser", "消しゴム"],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={bgTool === key ? "is-active" : ""}
+                  onClick={() => setBgTool(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {bgTool === "auto" && (
+              <div className="v2-bg-tool-body">
+                {renderTransparentToggle()}
+                <button
+                  type="button"
+                  className="v2-bg-tool-action"
+                  disabled={processing || !sheetSrc}
+                  onClick={() => void runAutoTransparency()}
+                >
+                  自動削除を再実行
+                </button>
+                <p>白や薄い背景が外側につながっている画像向きです。</p>
+              </div>
+            )}
+
+            {bgTool === "color" && (
+              <div className="v2-bg-tool-body">
+                <label className="v2-bg-slider">
+                  <span>許容値 <strong>{bgTolerance}</strong></span>
+                  <input
+                    type="range"
+                    min={4}
+                    max={90}
+                    step={1}
+                    value={bgTolerance}
+                    onChange={(e) => setBgTolerance(Number(e.target.value))}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="v2-bg-tool-action"
+                  disabled={processing || !pickedColor}
+                  onClick={() => void runColorTransparency()}
+                >
+                  この色でもう一度削除
+                </button>
+                <p>プレビュー上の消したい背景色をクリック。似た色の範囲は許容値で調整できます。</p>
+              </div>
+            )}
+
+            {bgTool === "eraser" && (
+              <div className="v2-bg-tool-body">
+                <label className="v2-bg-slider">
+                  <span>ブラシ <strong>{eraseRadius}px</strong></span>
+                  <input
+                    type="range"
+                    min={4}
+                    max={80}
+                    step={1}
+                    value={eraseRadius}
+                    onChange={(e) => setEraseRadius(Number(e.target.value))}
+                  />
+                </label>
+                <p>プレビュー上をなぞると、その部分だけ手動で透明になります。</p>
+              </div>
+            )}
           </div>
 
           {/* セル内余白の微調整 */}

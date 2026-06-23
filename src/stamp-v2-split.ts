@@ -1,6 +1,6 @@
 // ======================================================================
 // stamp-v2-split.ts
-// グリッド（4×4 / 3×3）シートをセルに分割するロジック。透過PNG前提。
+// グリッド（1×1〜5×5）シートをセルに分割するロジック。透過PNG前提。
 // ======================================================================
 
 export interface SourceImage {
@@ -9,7 +9,7 @@ export interface SourceImage {
   src: string;
 }
 
-export type GridSize = 3 | 4;
+export type GridSize = 1 | 2 | 3 | 4 | 5;
 
 export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -53,7 +53,7 @@ export function linePosition(cut: number, outerPadding: number) {
 
 /**
  * グリッドサイズに応じた初期分割位置（%）を返す。
- * 4×4 → [25, 50, 75]、3×3 → [33.33, 66.66]
+ * 5×5 → [20, 40, 60, 80]、1×1 → []
  */
 export function defaultCuts(gridSize: GridSize): number[] {
   const count = gridSize - 1;
@@ -66,6 +66,7 @@ export function defaultCuts(gridSize: GridSize): number[] {
  */
 export function safeCuts(cuts: number[], gridSize: GridSize = 4): number[] {
   const expected = gridSize - 1;
+  if (expected <= 0) return [];
   const arr = [...cuts].sort((a, b) => a - b);
   while (arr.length < expected) arr.push(((arr.length + 1) * 100) / gridSize);
   arr.length = expected;
@@ -127,6 +128,27 @@ export interface TransparentOptions {
   brightness?: number;
   /** 背景候補とみなす最大の彩度（max-min）。これ以下なら無彩色＝背景候補。既定 8 */
   satTol?: number;
+  /** クリック指定などで消したい背景色。未指定なら白背景判定を使う。 */
+  targetColor?: RgbColor;
+  /** targetColor からどれくらい近い色まで消すか。既定 24。 */
+  tolerance?: number;
+  /** trueなら縁からつながる背景だけ消す。falseなら同系色を全域から消す。既定 true。 */
+  contiguous?: boolean;
+}
+
+export interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+export interface EraseStroke {
+  /** 画像内の正規化X座標（0〜1） */
+  x: number;
+  /** 画像内の正規化Y座標（0〜1） */
+  y: number;
+  /** ブラシ半径px */
+  radius: number;
 }
 
 /**
@@ -144,6 +166,9 @@ export async function makeImageTransparent(
 ): Promise<string> {
   const brightMin = opts.brightness ?? 250;
   const satTol = opts.satTol ?? 8;
+  const targetColor = opts.targetColor;
+  const tolerance = opts.tolerance ?? 24;
+  const contiguous = opts.contiguous ?? true;
   const img = await loadImage(src);
   const w = img.naturalWidth || img.width;
   const h = img.naturalHeight || img.height;
@@ -166,7 +191,15 @@ export async function makeImageTransparent(
   const data = imageData.data;
   const n = w * h;
 
-  // 背景候補（明るく無彩色 or 既に透明）
+  const isTargetColor = (r: number, g: number, b: number) => {
+    if (!targetColor) return false;
+    const dr = r - targetColor.r;
+    const dg = g - targetColor.g;
+    const db = b - targetColor.b;
+    return Math.sqrt(dr * dr + dg * dg + db * db) <= tolerance;
+  };
+
+  // 背景候補（明るく無彩色 / 指定色 / 既に透明）
   const cand = new Uint8Array(n);
   for (let i = 0; i < n; i += 1) {
     const o = i * 4;
@@ -179,7 +212,19 @@ export async function makeImageTransparent(
     const b = data[o + 2];
     const mx = r > g ? (r > b ? r : b) : g > b ? g : b;
     const mn = r < g ? (r < b ? r : b) : g < b ? g : b;
-    if (mx >= brightMin && mx - mn <= satTol) cand[i] = 1;
+    if (targetColor) {
+      if (isTargetColor(r, g, b)) cand[i] = 1;
+    } else if (mx >= brightMin && mx - mn <= satTol) {
+      cand[i] = 1;
+    }
+  }
+
+  if (!contiguous) {
+    for (let i = 0; i < n; i += 1) {
+      if (cand[i]) data[i * 4 + 3] = 0;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL("image/png");
   }
 
   // 縁から繋がった背景候補だけをフラッドフィル（4近傍）
@@ -216,6 +261,61 @@ export async function makeImageTransparent(
     if (visited[i]) data[i * 4 + 3] = 0;
   }
   ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+export async function pickImageColor(
+  src: string,
+  xRatio: number,
+  yRatio: number,
+): Promise<RgbColor | null> {
+  const img = await loadImage(src);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0);
+  try {
+    const x = clamp(Math.round(xRatio * (w - 1)), 0, w - 1);
+    const y = clamp(Math.round(yRatio * (h - 1)), 0, h - 1);
+    const [r, g, b] = ctx.getImageData(x, y, 1, 1).data;
+    return { r, g, b };
+  } catch {
+    return null;
+  }
+}
+
+export async function eraseImageAtPoints(
+  src: string,
+  strokes: EraseStroke[],
+): Promise<string> {
+  if (!strokes.length) return src;
+  const img = await loadImage(src);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return src;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src;
+  ctx.drawImage(img, 0, 0);
+  ctx.globalCompositeOperation = "destination-out";
+  for (const stroke of strokes) {
+    const x = clamp(stroke.x, 0, 1) * w;
+    const y = clamp(stroke.y, 0, 1) * h;
+    const radius = clamp(stroke.radius, 1, Math.max(w, h));
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
   return canvas.toDataURL("image/png");
 }
 

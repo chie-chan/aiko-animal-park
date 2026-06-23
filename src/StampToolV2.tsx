@@ -9,7 +9,7 @@ import { centerImageContent, defaultCuts, type CellOffset, type GridSize, type S
 
 const MASCOT_TIPS: Record<number, string[]> = {
   1: [
-    "まずは4×4の画像をアップロード！白い背景なら自動で透過するよ。",
+    "まずは1×1〜5×5の画像をアップロード！白い背景なら自動で透過するよ。",
     "右の紫線をドラッグすると、分割位置を微調整できるよ。",
     "セルをクリックすると、その1枚を大きく拡大できるよ。",
     "サンプル画像で試したいときは、上のボタンから！",
@@ -101,7 +101,7 @@ export default function StampToolV2() {
     setHorizontalCuts(d);
   }, [gridSize]);
 
-  // 画像が入った状態で 4×4 ↔ 3×3 を切り替えたら、確認の上で編集状態をリセット
+  // 画像が入った状態でグリッドサイズを切り替えたら、確認の上で編集状態をリセット
   function handleGridSizeChange(next: GridSize) {
     if (next === gridSize) return;
     if (splitCells.length > 0) {
@@ -386,12 +386,12 @@ export default function StampToolV2() {
             <div className="v2-notice-body">
               <h4>このツールの位置づけ</h4>
               <p>
-                うちのこスタンプ工房は、AIで作った4×4画像を <strong>白背景の自動透過・16枚への分割・整形・ZIP化</strong> まで行うツールです。画像を生成したり、審査を代行したりするものではありません。
+                うちのこスタンプ工房は、AIで作った1×1〜5×5画像を <strong>背景削除・分割・整形・スタンプ/絵文字ZIP化</strong> まで行うツールです。画像を生成したり、審査を代行したりするものではありません。
               </p>
 
               <h4>📝 LINE審査について</h4>
               <p>
-                このツールが出力するZIPは <strong>LINE Creators Market の画像仕様（320×320 / 240×240 / 96×74 透過PNG）に沿った形式</strong> で書き出されますが、<strong>審査の通過を保証するものではありません。</strong>
+                このツールが出力するZIPは <strong>LINE Creators Market の画像仕様（スタンプ本体 / 絵文字180×180 / main.png / tab.png 透過PNG）に合わせて書き出せます</strong> が、<strong>審査の通過を保証するものではありません。</strong>
               </p>
               <ul>
                 <li>審査基準・ガイドラインは LINE 側の規約をご確認ください</li>
@@ -540,8 +540,8 @@ function StampGuideModal({ onClose, onOpenDesignRoom, onGoToUpload }: StampGuide
           <section className="v2-guide-lead">
             <h3>流れは「作る → 入れる（自動透過＆分割）→ 書き出す」です</h3>
             <p>
-              プロンプトで <strong>3×3=9コマ（または4×4=16コマ）</strong> のスタンプ画像を作り、この画面にアップロード。
-              <strong>白い背景はこの工房が自動で透過</strong>し、コマごとに分割してZIPで書き出します。あとは <strong>LINE Creators Market（Web）</strong> に提出するだけ。
+              プロンプトで <strong>1×1〜5×5</strong> のスタンプ画像を作り、この画面にアップロード。
+              <strong>背景はこの工房で自動削除・色指定削除・消しゴム修正</strong>し、コマごとに分割してZIPで書き出します。あとは <strong>LINE Creators Market（Web）</strong> に提出するだけ。
               （スマホで作りたい方は <a href="/stamp-mobile">スマホ版</a> へ）
             </p>
           </section>
@@ -598,7 +598,7 @@ const DESIGN_ROOM_GUIDE_STEPS: Record<
   2: {
     kicker: "STEP 2",
     title: "グリッドを選んでね",
-    body: "3×3=9コマがおすすめ（8枚＋予備1）。4×4=16コマも選べます。選ぶとプロンプトも自動で書き換わります。",
+    body: "1×1〜5×5まで選べます。スタンプなら3×3=9コマ、4×4=16コマがおすすめ。絵文字素材や候補出しなら5×5も便利です。",
   },
   3: {
     kicker: "STEP 3",
@@ -810,37 +810,35 @@ function DesignRoom(props: DesignRoomProps) {
         {/* ── ② スタンプ何個作る？ ──────────── */}
         <div className="v2-section-head">
           <span className="v2-section-num">2</span>
-          <span className="v2-section-title">スタンプは8個？16個？</span>
+          <span className="v2-section-title">画像は何分割にする？</span>
         </div>
 
         <div className="v2-form">
           <div className={`v2-form-row${guideStep === 2 ? " is-guide-target" : ""}`}>
             <div className="v2-form-radios" role="radiogroup" aria-label="グリッドサイズ切替">
-              <label className={`v2-form-radio v2-gridsize-radio${gridSize === 3 ? " is-checked" : ""}`}>
-                <input
-                  type="radio"
-                  name="v2-grid-size"
-                  value="3"
-                  checked={gridSize === 3}
-                  onChange={() => onChangeGridSize(3)}
-                />
-                3×3 <span className="v2-gridsize-radio-sub">9コマ</span>
-              </label>
-              <label className={`v2-form-radio v2-gridsize-radio${gridSize === 4 ? " is-checked" : ""}`}>
-                <input
-                  type="radio"
-                  name="v2-grid-size"
-                  value="4"
-                  checked={gridSize === 4}
-                  onChange={() => onChangeGridSize(4)}
-                />
-                4×4 <span className="v2-gridsize-radio-sub">16コマ</span>
-              </label>
+              {([1, 2, 3, 4, 5] as GridSize[]).map((size) => (
+                <label key={size} className={`v2-form-radio v2-gridsize-radio${gridSize === size ? " is-checked" : ""}`}>
+                  <input
+                    type="radio"
+                    name="v2-grid-size"
+                    value={size}
+                    checked={gridSize === size}
+                    onChange={() => onChangeGridSize(size)}
+                  />
+                  {size}×{size} <span className="v2-gridsize-radio-sub">{size * size}コマ</span>
+                </label>
+              ))}
             </div>
             <span className="v2-form-help">
-              {gridSize === 3
-                ? "8個スタンプ作れるよ！1個は予備。綺麗に作れるしおすすめ ✨"
-                : "16個スタンプ作れるよ！"}
+              {gridSize === 1
+                ? "1枚だけ確認・単品素材に使えます。"
+                : gridSize === 2
+                  ? "4枚の試作や表情ラフ向き。"
+                  : gridSize === 3
+                    ? "8個スタンプ＋予備1。綺麗に作れるしおすすめ ✨"
+                    : gridSize === 4
+                      ? "16個スタンプを作れます。"
+                      : "25枚分の素材をまとめて作れます。絵文字や候補出し向き。"}
             </span>
           </div>
         </div>
@@ -941,12 +939,12 @@ function DesignRoom(props: DesignRoomProps) {
             <span className="v2-canva-box-title">✨ 画像ができたら、この工房で仕上げよう</span>
           </div>
           <p style={{ fontSize: 12.5, color: "var(--v2-ink)", margin: "2px 0 8px", lineHeight: 1.7 }}>
-            AIで作った4×4画像を、そのままこの工房にアップロードするだけ。
-            <strong>白い背景は自動で透過</strong>し、コマごとに分割してZIPで書き出します。透過ソフトを別途用意する必要はありません。
+            AIで作った1×1〜5×5画像を、そのままこの工房にアップロードするだけ。
+            <strong>背景は自動削除・色指定・消しゴムで調整</strong>し、コマごとに分割してZIPで書き出します。
           </p>
           <ol className="v2-canva-box-steps">
-            <li>AIで生成した4×4画像をダウンロード</li>
-            <li>この画面にアップロード → 白背景を自動で透過＆16枚に分割</li>
+            <li>AIで生成した1×1〜5×5画像をダウンロード</li>
+            <li>この画面にアップロード → 背景削除＆コマごとに分割</li>
             <li>位置を整えて、メイン画像・タブ画像を選ぶ</li>
             <li>ZIPで書き出し → <strong>LINE Creators Market（Web）</strong>に提出</li>
           </ol>
@@ -964,7 +962,7 @@ function DesignRoom(props: DesignRoomProps) {
               className="v2-canva-link is-primary"
               onClick={onGoToStep2}
             >
-              → 4×4画像をアップロードへ
+              → 画像をアップロードへ
             </button>
           </div>
           <p style={{ fontSize: 11, color: "var(--v2-muted)", margin: "10px 0 0", lineHeight: 1.65 }}>
