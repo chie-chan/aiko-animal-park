@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "sync:works-gallery": "node scripts/sync-firebase-gallery-manifest-to-park.mjs",
     "check:sns-worker": "node --check workers/sns-post-worker/src/index.mjs && node --check workers/sns-post-worker/scripts/deploy-dry-run.mjs && node --check workers/sns-post-worker/scripts/deploy-live.mjs && node --check workers/sns-post-worker/scripts/deploy-safe.mjs && node workers/sns-post-worker/test/sns-post-worker.test.mjs",
     "deploy:sns-worker:dry-run": "node workers/sns-post-worker/scripts/deploy-dry-run.mjs",
     "deploy:sns-worker:live": "node workers/sns-post-worker/scripts/deploy-live.mjs",
