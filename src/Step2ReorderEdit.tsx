@@ -36,9 +36,16 @@ function bgClass(bg: BgPreview): string {
 
 const ARROW_STEP = 1.5; // % per arrow click
 const OFFSET_MAX = 50;
+const SCALE_MIN = 0.65;
+const SCALE_MAX = 1.8;
+const SCALE_STEP = 0.05;
 
 function clampOffsetValue(v: number) {
   return Math.max(-OFFSET_MAX, Math.min(OFFSET_MAX, v));
+}
+
+function clampScale(v: number) {
+  return Math.max(SCALE_MIN, Math.min(SCALE_MAX, v));
 }
 
 export default function Step2ReorderEdit(props: Props) {
@@ -51,7 +58,10 @@ export default function Step2ReorderEdit(props: Props) {
     gridCols = 4,
     gridRows = 4,
   } = props;
-  const gridStyle = { gridTemplateColumns: `repeat(${gridCols}, 1fr)` };
+  const isBatchLayout = splitCells.some((cell) => cell.id.startsWith("batch-")) || splitCells.length !== gridCols * gridRows;
+  const gridStyle = {
+    gridTemplateColumns: isBatchLayout ? "repeat(auto-fill, minmax(118px, 1fr))" : `repeat(${gridCols}, 1fr)`,
+  };
 
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -71,18 +81,23 @@ export default function Step2ReorderEdit(props: Props) {
   }, [splitCells.length]);
 
   function offsetFor(id: string): CellOffset {
-    return cellOffsets[id] ?? { dx: 0, dy: 0 };
+    return { dx: 0, dy: 0, scale: 1, ...(cellOffsets[id] ?? {}) };
   }
   function setOffsetFor(id: string, offset: CellOffset) {
     setCellOffsets({
       ...cellOffsets,
-      [id]: { dx: clampOffsetValue(offset.dx), dy: clampOffsetValue(offset.dy) },
+      [id]: {
+        dx: clampOffsetValue(offset.dx),
+        dy: clampOffsetValue(offset.dy),
+        scale: clampScale(offset.scale ?? 1),
+      },
     });
   }
   function transformFor(id: string) {
     const o = offsetFor(id);
-    if (!o.dx && !o.dy) return undefined;
-    return `translate(${o.dx}%, ${o.dy}%)`;
+    const scale = o.scale ?? 1;
+    if (!o.dx && !o.dy && scale === 1) return undefined;
+    return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
   }
 
   function handleDragStart(_e: React.DragEvent, index: number) {
@@ -126,9 +141,11 @@ export default function Step2ReorderEdit(props: Props) {
     const start = dragOffsetStart.current;
     const dPctX = ((e.clientX - start.x) / rect.width) * 100;
     const dPctY = ((e.clientY - start.y) / rect.height) * 100;
+    const o = offsetFor(selectedCell.id);
     setOffsetFor(selectedCell.id, {
       dx: start.dx + dPctX,
       dy: start.dy + dPctY,
+      scale: o.scale,
     });
   }
   function endOffsetDrag() {
@@ -139,11 +156,21 @@ export default function Step2ReorderEdit(props: Props) {
   function nudge(dx: number, dy: number) {
     if (!selectedCell) return;
     const o = offsetFor(selectedCell.id);
-    setOffsetFor(selectedCell.id, { dx: o.dx + dx, dy: o.dy + dy });
+    setOffsetFor(selectedCell.id, { dx: o.dx + dx, dy: o.dy + dy, scale: o.scale });
   }
   function resetOffset() {
     if (!selectedCell) return;
-    setOffsetFor(selectedCell.id, { dx: 0, dy: 0 });
+    setOffsetFor(selectedCell.id, { dx: 0, dy: 0, scale: 1 });
+  }
+  function setScale(scale: number) {
+    if (!selectedCell) return;
+    const o = offsetFor(selectedCell.id);
+    setOffsetFor(selectedCell.id, { ...o, scale });
+  }
+  function zoomBy(delta: number) {
+    if (!selectedCell) return;
+    const o = offsetFor(selectedCell.id);
+    setOffsetFor(selectedCell.id, { ...o, scale: (o.scale ?? 1) + delta });
   }
 
   if (!splitCells.length) {
@@ -157,7 +184,7 @@ export default function Step2ReorderEdit(props: Props) {
     );
   }
 
-  const selectedOffset = selectedCell ? offsetFor(selectedCell.id) : { dx: 0, dy: 0 };
+  const selectedOffset = selectedCell ? offsetFor(selectedCell.id) : { dx: 0, dy: 0, scale: 1 };
 
   return (
     <div className="v2-export-room">
@@ -165,10 +192,25 @@ export default function Step2ReorderEdit(props: Props) {
       <section className="v2-export-left">
         <div className="v2-export-head">
           <span className="v2-export-title">画像を整える</span>
-          <span className="v2-export-sub">ドラッグで並び替え／クリックで位置調整対象を選択</span>
+          <div className="v2-export-head-tools">
+            <span className="v2-export-sub">ドラッグで並び替え／クリックで位置調整対象を選択</span>
+            <div className="v2-bg-picker" role="group" aria-label="背景色プレビュー">
+              <span className="v2-bg-picker-label">背景</span>
+              {BG_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`v2-bg-swatch ${opt.cls}${bgPreview === opt.value ? " is-active" : ""}`}
+                  onClick={() => setBgPreview(opt.value)}
+                  aria-label={opt.label}
+                  title={opt.label}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="v2-reorder-grid" style={gridStyle}>
+        <div className={`v2-reorder-grid${isBatchLayout ? " is-batch-layout" : ""}`} style={gridStyle}>
           {splitCells.map((cell, index) => {
             const isMain = cell.id === mainImageId;
             const isTab = cell.id === tabImageId;
@@ -181,7 +223,8 @@ export default function Step2ReorderEdit(props: Props) {
                   bgClass(bgPreview) +
                   (draggingIndex === index ? " is-dragging" : "") +
                   (overIndex === index && draggingIndex !== null && draggingIndex !== index ? " is-drop-target" : "") +
-                  (isSelected ? " is-drop-target" : "")
+                  (isSelected ? " is-drop-target" : "") +
+                  (isBatchLayout ? " is-batch-cell" : "")
                 }
                 draggable
                 onClick={() => setSelectedIndex(index)}
@@ -251,8 +294,24 @@ export default function Step2ReorderEdit(props: Props) {
             <button type="button" className="v2-edit-arrow-empty" tabIndex={-1} />
           </div>
 
+          <label className="v2-edit-scale">
+            <span>拡大 <strong>{Math.round((selectedOffset.scale ?? 1) * 100)}%</strong></span>
+            <input
+              type="range"
+              min={SCALE_MIN}
+              max={SCALE_MAX}
+              step={0.01}
+              value={selectedOffset.scale ?? 1}
+              onChange={(e) => setScale(Number(e.target.value))}
+            />
+          </label>
+          <div className="v2-edit-zoom-row">
+            <button type="button" onClick={() => zoomBy(-SCALE_STEP)}>-</button>
+            <button type="button" onClick={() => zoomBy(SCALE_STEP)}>+</button>
+          </div>
+
           <div className="v2-edit-readout">
-            x: <strong>{selectedOffset.dx.toFixed(1)}%</strong>　　y: <strong>{selectedOffset.dy.toFixed(1)}%</strong>
+            x: <strong>{selectedOffset.dx.toFixed(1)}%</strong>　　y: <strong>{selectedOffset.dy.toFixed(1)}%</strong>　　拡大: <strong>{Math.round((selectedOffset.scale ?? 1) * 100)}%</strong>
           </div>
         </div>
       </section>

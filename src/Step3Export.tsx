@@ -11,9 +11,18 @@ interface Props {
   setTabImageId: (v: string) => void;
   cellOffsets: Record<string, CellOffset>;
   bgPreview: BgPreview;
+  setBgPreview: (v: BgPreview) => void;
   gridCols?: GridSize;
   gridRows?: GridSize;
 }
+
+const BG_OPTIONS: { value: BgPreview; label: string; cls: string }[] = [
+  { value: "checker", label: "透明チェック柄", cls: "checker" },
+  { value: "white", label: "白", cls: "white" },
+  { value: "black", label: "黒", cls: "black" },
+  { value: "pink", label: "ピンク", cls: "pink" },
+  { value: "blue", label: "ブルー", cls: "blue" },
+];
 
 function bgClass(bg: BgPreview): string {
   return bg === "checker" ? "" : ` bg-${bg}`;
@@ -77,10 +86,15 @@ export default function Step3Export(props: Props) {
     tabImageId, setTabImageId,
     cellOffsets,
     bgPreview,
+    setBgPreview,
     gridCols = 4,
     gridRows = 4,
   } = props;
-  const gridStyle = { gridTemplateColumns: `repeat(${gridCols}, 1fr)`, pointerEvents: "none" as const };
+  const isBatchLayout = splitCells.some((cell) => cell.id.startsWith("batch-")) || splitCells.length !== gridCols * gridRows;
+  const gridStyle = {
+    gridTemplateColumns: isBatchLayout ? "repeat(auto-fill, minmax(118px, 1fr))" : `repeat(${gridCols}, 1fr)`,
+    pointerEvents: "none" as const,
+  };
 
   const [activeTab, setActiveTab] = useState<MetaTab>("main");
   const [presetId, setPresetId] = useState<ExportPresetId>("sticker-max");
@@ -102,13 +116,14 @@ export default function Step3Export(props: Props) {
   const tabCell = splitCells.find((c) => c.id === tabImageId) ?? splitCells[0];
 
   function offsetFor(id: string): CellOffset {
-    return cellOffsets[id] ?? { dx: 0, dy: 0 };
+    return { dx: 0, dy: 0, scale: 1, ...(cellOffsets[id] ?? {}) };
   }
 
   function transformFor(id: string) {
     const o = offsetFor(id);
-    if (!o.dx && !o.dy) return undefined;
-    return `translate(${o.dx}%, ${o.dy}%)`;
+    const scale = o.scale ?? 1;
+    if (!o.dx && !o.dy && scale === 1) return undefined;
+    return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
   }
 
   async function downloadZip() {
@@ -173,19 +188,34 @@ export default function Step3Export(props: Props) {
       <section className="v2-export-left">
         <div className="v2-export-head">
           <span className="v2-export-title">LINE提出用の最終確認</span>
-          <span className="v2-export-sub">
-            {preset.bodyLabel} {preset.width}×{preset.height}
-            {preset.includeMain && " / M = メイン画像"}
-            {preset.includeTab && " / T = タブ画像"}
-          </span>
+          <div className="v2-export-head-tools">
+            <span className="v2-export-sub">
+              {preset.bodyLabel} {preset.width}×{preset.height}
+              {preset.includeMain && " / M = メイン画像"}
+              {preset.includeTab && " / T = タブ画像"}
+            </span>
+            <div className="v2-bg-picker" role="group" aria-label="背景色プレビュー">
+              <span className="v2-bg-picker-label">背景</span>
+              {BG_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`v2-bg-swatch ${opt.cls}${bgPreview === opt.value ? " is-active" : ""}`}
+                  onClick={() => setBgPreview(opt.value)}
+                  aria-label={opt.label}
+                  title={opt.label}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="v2-reorder-grid" style={gridStyle}>
+        <div className={`v2-reorder-grid${isBatchLayout ? " is-batch-layout" : ""}`} style={gridStyle}>
           {splitCells.map((cell, index) => {
             const isMain = preset.includeMain && cell.id === mainImageId;
             const isTab = preset.includeTab && cell.id === tabImageId;
             return (
-              <div key={cell.id} className={`v2-reorder-cell${bgClass(bgPreview)}`} style={{ cursor: "default" }}>
+              <div key={cell.id} className={`v2-reorder-cell${bgClass(bgPreview)}${isBatchLayout ? " is-batch-cell" : ""}`} style={{ cursor: "default" }}>
                 <span className="v2-reorder-cell-num">{index + 1}</span>
                 {(isMain || isTab) && (
                   <span className={`v2-reorder-cell-flag ${isMain ? "main" : "tab"}`}>
@@ -255,7 +285,7 @@ export default function Step3Export(props: Props) {
           )}
         </div>
 
-        <div className={`v2-meta-preview ${isMainTab ? "main" : "tab"}`}>
+        <div className={`v2-meta-preview ${isMainTab ? "main" : "tab"}${bgClass(bgPreview)}`}>
           {targetCell && (
             <img src={targetCell.src} alt="" style={{ transform: transformFor(targetCell.id) }} />
           )}
@@ -266,7 +296,7 @@ export default function Step3Export(props: Props) {
             <button
               key={cell.id}
               type="button"
-              className={`v2-meta-thumb${targetId === cell.id ? " is-selected" : ""}`}
+              className={`v2-meta-thumb${bgClass(bgPreview)}${targetId === cell.id ? " is-selected" : ""}`}
               onClick={() => setTargetId(cell.id)}
               aria-label={`${i + 1}番を${isMainTab ? "メイン" : "タブ"}画像にする`}
             >

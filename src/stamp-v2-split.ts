@@ -83,11 +83,12 @@ export function safeCuts(cuts: number[], gridSize: GridSize = 4): number[] {
 export interface CellOffset {
   dx: number; // % of target width  (-50 〜 +50)
   dy: number; // % of target height (-50 〜 +50)
+  scale?: number; // 1 = original fit size
 }
 
 /**
  * セル画像を指定サイズに収めて透過PNGとして書き出す（中央寄せ、余白は透過）。
- * offset を渡すと、中央位置から指定% だけずらして描画する。
+ * offset を渡すと、中央位置から指定% だけずらし、必要なら拡大して描画する。
  */
 export async function renderCellToSize(
   src: string,
@@ -119,11 +120,14 @@ export async function renderCellToSize(
     drawH = innerH;
     drawW = innerH * srcRatio;
   }
+  const scale = clamp(offset?.scale ?? 1, 0.2, 3);
+  const scaledW = drawW * scale;
+  const scaledH = drawH * scale;
   const offsetX = ((offset?.dx ?? 0) / 100) * innerW;
   const offsetY = ((offset?.dy ?? 0) / 100) * innerH;
-  const x = safeMargin + (innerW - drawW) / 2 + offsetX;
-  const y = safeMargin + (innerH - drawH) / 2 + offsetY;
-  ctx.drawImage(img, x, y, drawW, drawH);
+  const x = safeMargin + (innerW - scaledW) / 2 + offsetX;
+  const y = safeMargin + (innerH - scaledH) / 2 + offsetY;
+  ctx.drawImage(img, x, y, scaledW, scaledH);
 
   return canvasToBlob(canvas);
 }

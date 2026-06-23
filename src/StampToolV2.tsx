@@ -430,6 +430,7 @@ export default function StampToolV2() {
             setTabImageId={setTabImageId}
             cellOffsets={cellOffsets}
             bgPreview={bgPreview}
+            setBgPreview={setBgPreview}
             gridCols={splitGridCols}
             gridRows={splitGridRows}
           />
