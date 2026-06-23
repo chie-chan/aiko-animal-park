@@ -1609,6 +1609,52 @@
   padding: 10px 12px;
   margin: 8px 0 6px;
 }
+.v2-stage-toolbar {
+  align-self: start;
+  overflow: visible !important;
+  max-height: none !important;
+}
+.v2-export-right {
+  overflow: visible !important;
+  max-height: none !important;
+  align-self: start;
+}
+.v2-stepnav-item.is-skipped {
+  opacity: .55;
+}
+.v2-bg-edit-preview {
+  position: relative;
+  width: 100%;
+  height: clamp(118px, 18vh, 168px);
+  margin: 0 0 9px;
+  border-radius: 8px;
+  border: 1.5px solid var(--v2-line-soft);
+  background: repeating-conic-gradient(#f4ebf3 0deg 90deg, #fff 90deg 180deg) 0 0 / 12px 12px;
+  overflow: hidden;
+  user-select: none;
+}
+.v2-bg-edit-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.v2-bg-edit-preview.is-picking {
+  cursor: crosshair;
+}
+.v2-bg-edit-preview.is-erasing {
+  cursor: cell;
+}
+.v2-batch-background-grid {
+  grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+}
+.v2-toolbar-note {
+  margin: 9px 0 0;
+  color: var(--v2-muted);
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.55;
+}
 .v2-bg-tool-head {
   display: flex;
   align-items: center;

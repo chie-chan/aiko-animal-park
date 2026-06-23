@@ -34,13 +34,16 @@ const MASCOT_TIPS: Record<number, string[]> = {
 
 // ======================================================================
 // StampToolV2  ―  PC専用、仕上げワークフロー
-//   1: 素材取り込み（シート分割 / 40枚一括）
-//   2: 画像調整（並び替え / 位置 / 背景確認）
-//   3: LINE用書き出し（スタンプ / 絵文字 / ZIP）
+//   1: 画像取り込み（シート分割 / 40枚一括）
+//   2: グリッド調整（シート分割のみ）
+//   3: 背景透過
+//   4: 画像配置（自動中央寄せ / 手動移動）
+//   5: LINE用書き出し（スタンプ / 絵文字 / ZIP）
 //   ＋ デザインルーム（番号外、右上ボタンから呼び出し）
 // ======================================================================
 
-type StepId = 1 | 2 | 3;
+type StepId = 1 | 2 | 3 | 4 | 5;
+type IntakeMode = "sheet" | "batch" | null;
 type DesignRoomGuideStep = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type BgPreview = "checker" | "white" | "black" | "pink" | "blue";
 
@@ -96,6 +99,20 @@ export default function StampToolV2() {
   const [verticalCuts, setVerticalCuts] = useState<number[]>(() => defaultCuts(4));
   const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(4));
   const [splitCells, setSplitCells] = useState<SourceImage[]>([]);
+  const [intakeMode, setIntakeMode] = useState<IntakeMode>(null);
+  const [hasAutoCentered, setHasAutoCentered] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (splitCells.length === 0) {
+      setIntakeMode(null);
+      setHasAutoCentered(false);
+    }
+  }, [splitCells.length]);
+
+  function handleImportModeChange(mode: IntakeMode) {
+    setIntakeMode(mode);
+    setHasAutoCentered(false);
+  }
 
   // グリッドサイズ切替時に分割線をその初期値に戻す（セル数が変わるため）
   useEffect(() => {
@@ -121,6 +138,7 @@ export default function StampToolV2() {
       setCellOffsets({});
       setMainImageId("");
       setTabImageId("");
+      setHasAutoCentered(false);
     }
     if (axis === "cols") {
       setVerticalCuts(defaultCuts(next));
@@ -146,11 +164,16 @@ export default function StampToolV2() {
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
   const [bgPreview, setBgPreview] = useState<BgPreview>("checker");
 
-  const canGoNext =
-    step === 3 ? false :
-    step === 1 ? splitCells.length > 0 :
-    step === 2 ? splitCells.length > 0 :
-    false;
+  function nextStepForCurrent(): StepId | null {
+    if (step === 1) return intakeMode === "batch" ? 3 : 2;
+    if (step === 2) return 3;
+    if (step === 3) return 4;
+    if (step === 4) return 5;
+    return null;
+  }
+
+  const nextStep = nextStepForCurrent();
+  const canGoNext = nextStep !== null && splitCells.length > 0;
   const hasOpenOverlay = showStartSpotlight || showGuide || showNotice || showDesignRoom;
 
   // 取り込み直後に編集へ進むときは、進み方に関係なく各セルの中身を自動で中央寄せする。
@@ -172,14 +195,25 @@ export default function StampToolV2() {
   }
 
   async function goToStep(next: StepId) {
-    if (next > 1 && step === 1 && splitCells.length > 0) {
+    const target = next === 2 && intakeMode === "batch" ? 3 : next;
+    if (target >= 4 && !hasAutoCentered && splitCells.length > 0) {
       await centerCellsBeforeEdit();
+      setHasAutoCentered(true);
     }
-    setStep(next);
+    setStep(target);
   }
 
   function handleNext() {
-    void goToStep(Math.min(3, step + 1) as StepId);
+    if (nextStep) void goToStep(nextStep);
+  }
+
+  function handlePrevious() {
+    if (step === 1) return;
+    if (step === 3 && intakeMode === "batch") {
+      setStep(1);
+      return;
+    }
+    setStep((Math.max(1, step - 1) as StepId));
   }
 
   function openDesignRoomWithGuide() {
@@ -209,29 +243,53 @@ export default function StampToolV2() {
           >
             <span className="v2-stepnum">1</span>
             <span className="v2-steptext">
-              <span className="v2-steplabel">素材を取り込む</span>
-              <span className="v2-stepsub">シート分割 / 40枚一括</span>
+              <span className="v2-steplabel">画像を取り込む</span>
+              <span className="v2-stepsub">分割 or 40枚一括</span>
             </span>
           </button>
           <button
             type="button"
-            className={`v2-stepnav-item${step === 2 ? " is-active" : step > 2 ? " is-done" : ""}`}
+            className={`v2-stepnav-item${step === 2 ? " is-active" : step > 2 ? " is-done" : ""}${intakeMode === "batch" ? " is-skipped" : ""}`}
             onClick={() => void goToStep(2)}
-            disabled={splitCells.length === 0 || centering}
+            disabled={intakeMode === "batch" || !sheetSrc || splitCells.length === 0 || centering}
           >
             <span className="v2-stepnum">2</span>
             <span className="v2-steptext">
-              <span className="v2-steplabel">画像を整える</span>
-              <span className="v2-stepsub">順番 / 位置 / 背景確認</span>
+              <span className="v2-steplabel">グリッドを整える</span>
+              <span className="v2-stepsub">分割シートだけ</span>
             </span>
           </button>
           <button
             type="button"
-            className={`v2-stepnav-item${step === 3 ? " is-active" : ""}`}
+            className={`v2-stepnav-item${step === 3 ? " is-active" : step > 3 ? " is-done" : ""}`}
             onClick={() => void goToStep(3)}
             disabled={splitCells.length === 0 || centering}
           >
             <span className="v2-stepnum">3</span>
+            <span className="v2-steptext">
+              <span className="v2-steplabel">背景透過</span>
+              <span className="v2-stepsub">自動 / 色 / 消しゴム</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`v2-stepnav-item${step === 4 ? " is-active" : step > 4 ? " is-done" : ""}`}
+            onClick={() => void goToStep(4)}
+            disabled={splitCells.length === 0 || centering}
+          >
+            <span className="v2-stepnum">4</span>
+            <span className="v2-steptext">
+              <span className="v2-steplabel">画像配置</span>
+              <span className="v2-stepsub">自動中央 / 手動移動</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`v2-stepnav-item${step === 5 ? " is-active" : ""}`}
+            onClick={() => void goToStep(5)}
+            disabled={splitCells.length === 0 || centering}
+          >
+            <span className="v2-stepnum">5</span>
             <span className="v2-steptext">
               <span className="v2-steplabel">LINE用ZIP</span>
               <span className="v2-stepsub">スタンプ / 絵文字</span>
@@ -284,6 +342,7 @@ export default function StampToolV2() {
       <main className="v2-main">
         {step === 1 && (
           <Step2Splitter
+            phase="import"
             sheetSrc={sheetSrc}
             setSheetSrc={setSheetSrc}
             verticalCuts={verticalCuts}
@@ -296,10 +355,49 @@ export default function StampToolV2() {
             gridRows={splitGridRows}
             onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
             onChangeGridRows={(next) => handleSplitGridChange("rows", next)}
+            onImportModeChange={handleImportModeChange}
           />
         )}
 
         {step === 2 && (
+          <Step2Splitter
+            phase="grid"
+            sheetSrc={sheetSrc}
+            setSheetSrc={setSheetSrc}
+            verticalCuts={verticalCuts}
+            setVerticalCuts={setVerticalCuts}
+            horizontalCuts={horizontalCuts}
+            setHorizontalCuts={setHorizontalCuts}
+            splitCells={splitCells}
+            setSplitCells={setSplitCells}
+            gridCols={splitGridCols}
+            gridRows={splitGridRows}
+            onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
+            onChangeGridRows={(next) => handleSplitGridChange("rows", next)}
+            onImportModeChange={handleImportModeChange}
+          />
+        )}
+
+        {step === 3 && (
+          <Step2Splitter
+            phase="background"
+            sheetSrc={sheetSrc}
+            setSheetSrc={setSheetSrc}
+            verticalCuts={verticalCuts}
+            setVerticalCuts={setVerticalCuts}
+            horizontalCuts={horizontalCuts}
+            setHorizontalCuts={setHorizontalCuts}
+            splitCells={splitCells}
+            setSplitCells={setSplitCells}
+            gridCols={splitGridCols}
+            gridRows={splitGridRows}
+            onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
+            onChangeGridRows={(next) => handleSplitGridChange("rows", next)}
+            onImportModeChange={handleImportModeChange}
+          />
+        )}
+
+        {step === 4 && (
           <Step2ReorderEdit
             splitCells={splitCells}
             setSplitCells={setSplitCells}
@@ -316,7 +414,7 @@ export default function StampToolV2() {
           />
         )}
 
-        {step === 3 && (
+        {step === 5 && (
           <Step3Export
             splitCells={splitCells}
             mainImageId={mainImageId}
@@ -340,26 +438,38 @@ export default function StampToolV2() {
           type="button"
           className="v2-btn-secondary"
           disabled={step === 1}
-          onClick={() => setStep((s) => Math.max(1, s - 1) as StepId)}
+          onClick={handlePrevious}
         >
           ← 戻る
         </button>
         <p className="v2-bottom-msg">
-          {step === 1 && "入口を選んで素材を取り込みます。シート分割、完成済み画像40枚一括、背景削除をここで扱います。"}
-          {step === 2 && "申請前の見え方を整えます。順番、位置、背景プレビューを確認できます。"}
-          {step === 3 && "用途を選んで透過PNGのZIPを書き出します。スタンプ用と絵文字用を切り替えできます。"}
+          {step === 1 && "分割シートか、完成済み画像40枚一括かを選んで取り込みます。"}
+          {step === 2 && "分割シートの行数・列数と切り取り線を整えます。40枚一括ではここを飛ばします。"}
+          {step === 3 && "白背景の自動透過、色クリック、消しゴムで背景を整えます。"}
+          {step === 4 && "画像を自動で中央に寄せたあと、必要なコマだけ手動で位置調整します。"}
+          {step === 5 && "スタンプ用または絵文字用の透過PNG ZIPを書き出します。"}
         </p>
         <span className="v2-bottom-disclaimer">
           ※LINE審査の通過を保証するものではありません <a onClick={() => setShowNotice(true)}>詳しく</a>
         </span>
-        {step < 3 ? (
+        {step < 5 ? (
           <button
             type="button"
             className="v2-btn-primary"
             disabled={!canGoNext || centering}
             onClick={handleNext}
           >
-            {centering ? "中央寄せ中…" : step === 1 ? "画像を整える →" : "LINE用ZIPへ →"}
+            {centering
+              ? "中央寄せ中…"
+              : step === 1 && intakeMode === "batch"
+                ? "背景透過へ →"
+                : step === 1
+                  ? "グリッドを整える →"
+                  : step === 2
+                    ? "背景透過へ →"
+                    : step === 3
+                      ? "画像配置へ →"
+                      : "LINE用ZIPへ →"}
           </button>
         ) : (
           <a

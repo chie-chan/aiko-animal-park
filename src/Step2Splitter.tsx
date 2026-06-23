@@ -22,6 +22,7 @@ import {
 // ======================================================================
 
 interface Props {
+  phase?: "import" | "grid" | "background";
   sheetSrc: string | null;
   setSheetSrc: (v: string | null) => void;
   verticalCuts: number[];
@@ -34,6 +35,7 @@ interface Props {
   gridRows?: GridSize;
   onChangeGridCols?: (g: GridSize) => void;
   onChangeGridRows?: (g: GridSize) => void;
+  onImportModeChange?: (mode: "sheet" | "batch" | null) => void;
 }
 
 type DragAxis = "vertical" | "horizontal";
@@ -62,6 +64,7 @@ interface CellRegion {
 
 export default function Step2Splitter(props: Props) {
   const {
+    phase = "grid",
     sheetSrc, setSheetSrc,
     verticalCuts, setVerticalCuts,
     horizontalCuts, setHorizontalCuts,
@@ -70,6 +73,7 @@ export default function Step2Splitter(props: Props) {
     gridRows = 4,
     onChangeGridCols,
     onChangeGridRows,
+    onImportModeChange,
   } = props;
 
   function renderGridDimensionSlider(
@@ -397,6 +401,7 @@ export default function Step2Splitter(props: Props) {
   async function handleFile(files: FileList | null) {
     if (!files || !files[0]) return;
     const url = await readFileAsDataUrl(files[0]);
+    onImportModeChange?.("sheet");
     await applyUploadedSrc(url);
   }
 
@@ -415,6 +420,7 @@ export default function Step2Splitter(props: Props) {
     setSheetSrc(null);
     setRawSrc(null);
     setPickedColor(null);
+    onImportModeChange?.("batch");
     try {
       const cells: SourceImage[] = [];
       for (let i = 0; i < limited.length; i += 1) {
@@ -436,6 +442,30 @@ export default function Step2Splitter(props: Props) {
     } catch (err) {
       console.error(err);
       setMessage("一括取り込みに失敗しました。画像を確認してください。");
+    } finally {
+      setProcessing(false);
+      setBatchProgress("");
+    }
+  }
+
+  async function runBatchTransparency() {
+    if (!splitCells.length || processing) return;
+    setProcessing(true);
+    setBatchProgress(`0 / ${splitCells.length} 枚を透過中…`);
+    setMessage("");
+    try {
+      const next: SourceImage[] = [];
+      for (let i = 0; i < splitCells.length; i += 1) {
+        setBatchProgress(`${i + 1} / ${splitCells.length} 枚を透過中…`);
+        const cell = splitCells[i];
+        next.push({ ...cell, src: await makeImageTransparent(cell.src) });
+      }
+      setSplitCells(next);
+      setBatchProgress("");
+      setMessage(`${next.length}枚の背景透過を更新しました。`);
+    } catch (err) {
+      console.error(err);
+      setMessage("一括背景透過に失敗しました。画像を確認してください。");
     } finally {
       setProcessing(false);
       setBatchProgress("");
@@ -535,7 +565,45 @@ export default function Step2Splitter(props: Props) {
   const gridLabel = `${gridCols}×${gridRows}`;
 
   // ── 描画 ──────────────────────────────────────────────
-  if (!sheetSrc) {
+  if (phase === "background" && !sheetSrc && splitCells.length > 0) {
+    return (
+      <div className="v2-export-room v2-batch-background-room">
+        <section className="v2-export-left">
+          <div className="v2-export-head">
+            <span className="v2-export-title">背景透過プレビュー</span>
+            <span className="v2-export-sub">40枚一括取り込み</span>
+          </div>
+          <div className="v2-batch-preview-grid v2-batch-background-grid">
+            {splitCells.slice(0, 40).map((cell, index) => (
+              <div key={cell.id} className="v2-batch-preview-cell">
+                <img src={cell.src} alt="" />
+                <span>{index + 1}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="v2-export-right v2-stage-toolbar">
+          <h4 className="v2-adjust-title">背景透過</h4>
+          <p className="v2-adjust-sub">
+            完成画像をまとめて取り込んだ場合は、ここで40枚まで一括で白背景を透過できます。
+          </p>
+          <button
+            type="button"
+            className="v2-bg-tool-action"
+            disabled={processing || splitCells.length === 0}
+            onClick={() => void runBatchTransparency()}
+          >
+            {processing ? "透過中…" : "40枚を一括透過"}
+          </button>
+          {batchProgress && <p className="v2-toolbar-note">{batchProgress}</p>}
+          {message && <p className="v2-toolbar-note">{message}</p>}
+        </section>
+      </div>
+    );
+  }
+
+  if (phase === "import" || !sheetSrc) {
     // 画像未アップロード：ドロップゾーンを大きく表示
     return (
       <div className="v2-split-room" style={{ gridTemplateColumns: "1fr" }}>
@@ -611,6 +679,7 @@ export default function Step2Splitter(props: Props) {
                     onClick={() => {
                       setSplitCells([]);
                       setMessage("");
+                      onImportModeChange?.(null);
                     }}
                   >
                     クリア
@@ -657,6 +726,8 @@ export default function Step2Splitter(props: Props) {
   }
 
   const lastIdx = cellCount - 1;
+  const showGridControls = phase !== "background";
+  const showBackgroundControls = phase !== "grid";
 
   return (
     <>
@@ -743,23 +814,28 @@ export default function Step2Splitter(props: Props) {
         </section>
 
         {/* RIGHT: 分割と背景の操作（普段は省スペース） */}
-        <section className="v2-split-right">
-          <h4 className="v2-adjust-title">分割と背景の調整</h4>
-          <p className="v2-adjust-sub">通常はグリッドサイズと自動背景削除だけで進めます。細かい手動調整は必要な時だけ開けます。</p>
+        <section className="v2-split-right v2-stage-toolbar">
+          <h4 className="v2-adjust-title">{phase === "background" ? "背景透過" : "グリッドを整える"}</h4>
+          <p className="v2-adjust-sub">
+            {phase === "background"
+              ? "白背景は自動で透過できます。必要なときだけ色クリックや消しゴムを使います。"
+              : "縦横の数を選び、必要ならプレビュー上の線をドラッグして微調整します。"}
+          </p>
 
           {/* グリッドサイズ切替 */}
-          {(onChangeGridCols || onChangeGridRows) && (
+          {showGridControls && (onChangeGridCols || onChangeGridRows) && (
             <div className="v2-adjust-gridbar">
               {renderGridSizeSliders()}
             </div>
           )}
 
+          {showGridControls && (
           <details
             className="v2-adjust-advanced"
             open={advancedOpen}
             onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
           >
-            <summary>分割線・セル余白・手動削除を調整</summary>
+            <summary>分割線とセル余白を調整</summary>
             <div
               ref={adjustPreviewRef}
               className={`v2-adjust-preview${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
@@ -790,7 +866,7 @@ export default function Step2Splitter(props: Props) {
                 />
               ))}
             </div>
-            <p>分割線は画像上でドラッグできます。色クリックと消しゴムも、この画像上で操作します。</p>
+            <p>分割線は画像上でドラッグできます。隣のセルが少し写るときだけセル余白を上げます。</p>
             <div className="v2-trim-gutter-card">
               <div className="v2-trim-gutter-head">
                 <span>セル内をすこし内側へ</span>
@@ -809,8 +885,10 @@ export default function Step2Splitter(props: Props) {
               <p>隣のセルがちょっと写り込むときだけ上げます。普段は 0% でOK。</p>
             </div>
           </details>
+          )}
 
           {/* 背景削除ツール */}
+          {showBackgroundControls && (
           <div className="v2-bg-tool-card">
             <div className="v2-bg-tool-head">
               <span>背景削除</span>
@@ -821,6 +899,16 @@ export default function Step2Splitter(props: Props) {
                   style={{ background: `rgb(${pickedColor.r}, ${pickedColor.g}, ${pickedColor.b})` }}
                 />
               )}
+            </div>
+            <div
+              ref={adjustPreviewRef}
+              className={`v2-bg-edit-preview${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
+              onPointerDown={handlePreviewPointerDown}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerUp}
+              onPointerCancel={handlePreviewPointerUp}
+            >
+              <img src={sheetSrc} alt="" draggable={false} />
             </div>
             <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
               {([
@@ -899,8 +987,10 @@ export default function Step2Splitter(props: Props) {
               </div>
             )}
           </div>
+          )}
 
           <div className="v2-split-actions">
+            {showGridControls && (
             <button
               type="button"
               className="v2-btn-reset"
@@ -911,6 +1001,7 @@ export default function Step2Splitter(props: Props) {
             >
               ↺ リセット
             </button>
+            )}
             <button
               type="button"
               className="v2-sheet-bar-swap"
@@ -923,7 +1014,7 @@ export default function Step2Splitter(props: Props) {
 
           {splitCells.length > 0 && (
             <p style={{ fontSize: 11.5, color: "var(--v2-pink)", margin: "12px 0 0", fontWeight: 800, textAlign: "center" }}>
-              ✓ {cellCount}枚に分割済み（画像を整えるへ進めます）
+              ✓ {cellCount}枚に分割済み（次の工程へ進めます）
             </p>
           )}
           {message && (
