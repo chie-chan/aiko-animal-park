@@ -207,6 +207,10 @@ export default function StampToolV2() {
     if (nextStep) void goToStep(nextStep);
   }
 
+  function handleImportComplete(mode: "sheet" | "batch") {
+    setStep(mode === "batch" ? 3 : 2);
+  }
+
   function handlePrevious() {
     if (step === 1) return;
     if (step === 3 && intakeMode === "batch") {
@@ -356,6 +360,7 @@ export default function StampToolV2() {
             onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
             onChangeGridRows={(next) => handleSplitGridChange("rows", next)}
             onImportModeChange={handleImportModeChange}
+            onImportComplete={handleImportComplete}
           />
         )}
 
@@ -375,6 +380,7 @@ export default function StampToolV2() {
             onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
             onChangeGridRows={(next) => handleSplitGridChange("rows", next)}
             onImportModeChange={handleImportModeChange}
+            onImportComplete={handleImportComplete}
           />
         )}
 
@@ -394,6 +400,7 @@ export default function StampToolV2() {
             onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
             onChangeGridRows={(next) => handleSplitGridChange("rows", next)}
             onImportModeChange={handleImportModeChange}
+            onImportComplete={handleImportComplete}
           />
         )}
 

@@ -36,6 +36,7 @@ interface Props {
   onChangeGridCols?: (g: GridSize) => void;
   onChangeGridRows?: (g: GridSize) => void;
   onImportModeChange?: (mode: "sheet" | "batch" | null) => void;
+  onImportComplete?: (mode: "sheet" | "batch") => void;
 }
 
 type DragAxis = "vertical" | "horizontal";
@@ -74,6 +75,7 @@ export default function Step2Splitter(props: Props) {
     onChangeGridCols,
     onChangeGridRows,
     onImportModeChange,
+    onImportComplete,
   } = props;
 
   function renderGridDimensionSlider(
@@ -387,6 +389,7 @@ export default function Step2Splitter(props: Props) {
     const url = await readFileAsDataUrl(files[0]);
     onImportModeChange?.("sheet");
     await applyUploadedSrc(url);
+    onImportComplete?.("sheet");
   }
 
   async function handleBatchFiles(files: FileList | null) {
@@ -405,6 +408,7 @@ export default function Step2Splitter(props: Props) {
     setRawSrc(null);
     setPickedColor(null);
     onImportModeChange?.("batch");
+    let imported = false;
     try {
       const cells: SourceImage[] = [];
       for (let i = 0; i < limited.length; i += 1) {
@@ -422,6 +426,7 @@ export default function Step2Splitter(props: Props) {
       setMessage(
         `${cells.length}枚を一括取り込みしました${skipped > 0 ? `（上限${MAX_BATCH_IMAGES}枚のため${skipped}枚は未取り込み）` : ""}。`,
       );
+      imported = true;
     } catch (err) {
       console.error(err);
       setMessage("一括取り込みに失敗しました。画像を確認してください。");
@@ -429,6 +434,7 @@ export default function Step2Splitter(props: Props) {
       setProcessing(false);
       setBatchProgress("");
     }
+    if (imported) onImportComplete?.("batch");
   }
 
   async function runBatchTransparency() {
