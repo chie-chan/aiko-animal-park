@@ -569,7 +569,7 @@ export default function StampToolV2() {
       </main>
 
       {/* ── 動かせるマスコット（Clippy風） ── */}
-      {!hasOpenOverlay && <FloatingMascot tipsByStep={MASCOT_TIPS} currentStep={step} />}
+      {false && !hasOpenOverlay && <FloatingMascot tipsByStep={MASCOT_TIPS} currentStep={step} />}
 
       {/* ── 下部：アクションバー ── */}
       <footer className="v2-bottombar">
