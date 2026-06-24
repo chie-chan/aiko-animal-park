@@ -81,7 +81,6 @@ export default function StampToolV2() {
   // ── デザインルーム（モーダル） ──────────────────────
   const [showDesignRoom, setShowDesignRoom] = useState<boolean>(false);
   const [showStartSpotlight, setShowStartSpotlight] = useState<boolean>(true);
-  const [showGuide, setShowGuide] = useState<boolean>(false);
   const [showNotice, setShowNotice] = useState<boolean>(false);
   const startSpotlightTargetRef = useRef<HTMLDivElement | null>(null);
   const [startSpotlightPlacement, setStartSpotlightPlacement] = useState<SpotlightPlacement | null>(null);
@@ -236,7 +235,7 @@ export default function StampToolV2() {
 
   const nextStep = nextStepForCurrent();
   const canGoNext = nextStep !== null && splitCells.length > 0;
-  const hasOpenOverlay = showStartSpotlight || showGuide || showNotice || showDesignRoom;
+  const hasOpenOverlay = showStartSpotlight || showNotice || showDesignRoom;
   const startSpotlightStyle = startSpotlightPlacement
     ? ({
         "--v2-spotlight-left": `${startSpotlightPlacement.left}px`,
@@ -437,25 +436,6 @@ export default function StampToolV2() {
         >
           📱 スマホ版
         </a>
-        <button
-          type="button"
-          className="v2-topbar-info-btn"
-          onClick={() => setShowNotice(true)}
-          title="ご利用の注意点"
-        >
-          ℹ️ 注意点
-        </button>
-        <button
-          type="button"
-          className="v2-topbar-guide-btn"
-          onClick={() => {
-            setShowStartSpotlight(false);
-            setShowGuide(true);
-          }}
-          title="使い方を見る"
-        >
-          使い方
-        </button>
         <div
           ref={startSpotlightTargetRef}
           className={`v2-topbar-start${showStartSpotlight ? " is-spotlight-target" : ""}`}
@@ -641,21 +621,6 @@ export default function StampToolV2() {
         </div>
       )}
 
-      {/* ── 使い方ガイド ── */}
-      {showGuide && (
-        <StampGuideModal
-          onClose={() => setShowGuide(false)}
-          onOpenDesignRoom={() => {
-            setShowGuide(false);
-            openDesignRoomWithGuide();
-          }}
-          onGoToUpload={() => {
-            setShowGuide(false);
-            setStep(1);
-          }}
-        />
-      )}
-
       {/* ── 注意事項モーダル ── */}
       {showNotice && (
         <div
@@ -798,101 +763,6 @@ export default function StampToolV2() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ======================================================================
-// 使い方ガイド（図解モーダル）
-// ======================================================================
-interface StampGuideModalProps {
-  onClose: () => void;
-  onOpenDesignRoom: () => void;
-  onGoToUpload: () => void;
-}
-
-function StampGuideModal({ onClose, onOpenDesignRoom, onGoToUpload }: StampGuideModalProps) {
-  return (
-    <div
-      className="v2-guide-overlay"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div className="v2-guide-modal">
-        <div className="v2-guide-bar">
-          <div>
-            <span>GUIDE ・ 💻 PC版</span>
-            <strong>スタンプ仕上げ室の使い方</strong>
-          </div>
-          <button type="button" className="v2-designroom-modal-close" onClick={onClose} aria-label="閉じる">
-            ×
-          </button>
-        </div>
-
-        <div className="v2-guide-body">
-          <section className="v2-guide-lead">
-            <h3>素材作りと申請前の仕上げを分けて使います</h3>
-            <p>
-              プロンプトで <strong>1×1〜5×5</strong> のスタンプ画像を作るか、完成済み画像を最大40枚まとめてアップロード。
-              <strong>背景はこの工房で自動削除・色指定削除・消しゴム修正</strong>し、コマごとに整えてZIPで書き出します。あとは <strong>LINE Creators Market（Web）</strong> に提出するだけ。
-              （スマホで作りたい方は <a href="/stamp-mobile">スマホ版</a> へ）
-            </p>
-          </section>
-
-          <div className="v2-guide-flow" aria-label="仕上げ室の作業区分">
-            <section className="v2-guide-flow-card outside">
-              <span className="v2-guide-badge">準備</span>
-              <b>プロンプトで素材を作る</b>
-              <p>デザイン・種類・特徴を入れて、1×1〜5×5の素材画像を作ります。</p>
-            </section>
-            <div className="v2-guide-arrow">→</div>
-            <section className="v2-guide-flow-card inside">
-              <span className="v2-guide-badge">編集</span>
-              <b>背景と並びを整える</b>
-              <p>シート分割、40枚一括、背景削除、位置調整をまとめて行います。</p>
-            </section>
-            <div className="v2-guide-arrow">→</div>
-            <section className="v2-guide-flow-card inside">
-              <span className="v2-guide-badge">提出</span>
-              <b>LINE用ZIPを書き出す</b>
-              <p>スタンプ・絵文字のサイズを選び、main.png / tab.pngも一緒に出します。</p>
-            </section>
-          </div>
-
-          <div className="v2-guide-poster-list" aria-label="うちのこスタンプ工房の使い方ガイド">
-            <figure className="v2-guide-poster">
-              <img
-                src="/stamp-v2-guide/stamp-v2-howto-1.png"
-                alt="使い方 1ページ目。プロンプトを作り、ペット写真と一緒にChatGPTへ貼り付ける流れ"
-              />
-            </figure>
-            <figure className="v2-guide-poster">
-              <img
-                src="/stamp-v2-guide/stamp-v2-howto-2.png"
-                alt="使い方 2ページ目。背景を透過し、画像をアップロードして仕上げる流れ"
-              />
-            </figure>
-          </div>
-
-          <div className="v2-guide-note">
-            <strong>📱 スマホで触っている方へ</strong>
-            <p>
-              このガイドはPC版（ZIPでまとめて書き出す用途）の説明です。スマホで作るなら <a href="/stamp-mobile">スマホ版（/stamp-mobile）</a> のほうがおすすめ。
-              透過は不要・LINEスタンプメーカー（公式アプリ）が自動でやってくれるので、そのままの画像でアップロードできます。
-            </p>
-          </div>
-        </div>
-
-        <div className="v2-guide-foot">
-          <button type="button" className="v2-guide-secondary" onClick={onOpenDesignRoom}>
-            プロンプトを作る
-          </button>
-          <button type="button" className="v2-guide-primary" onClick={onGoToUpload}>
-            素材を取り込むへ
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
