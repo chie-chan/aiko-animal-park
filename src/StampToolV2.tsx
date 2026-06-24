@@ -179,12 +179,6 @@ export default function StampToolV2() {
     const current = axis === "cols" ? splitGridCols : splitGridRows;
     if (next === current) return;
     if (sheetSrc && splitCells.length > 0) {
-      const cur = `${splitGridCols}×${splitGridRows}`;
-      const tgt = axis === "cols" ? `${next}×${splitGridRows}` : `${splitGridCols}×${next}`;
-      const ok = window.confirm(
-        `グリッドを ${cur} → ${tgt} に切り替えますか？\n\n画像は再分割され、並び替え・位置調整・メイン画像の選択はリセットされます。`,
-      );
-      if (!ok) return;
       setSelectedCellIndex(0);
       setCellOffsets({});
       setMainImageId("");

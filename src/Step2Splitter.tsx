@@ -204,7 +204,7 @@ export default function Step2Splitter(props: Props) {
   const [bgTool, setBgTool] = useState<BgTool>("auto");
   const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
   const [bgTolerance, setBgTolerance] = useState<number>(24);
-  const [eraseRadius, setEraseRadius] = useState<number>(22);
+  const [eraseRadius, setEraseRadius] = useState<number>(10);
   const [pickedColor, setPickedColor] = useState<RgbColor | null>(null);
   const [bgUndoCount, setBgUndoCount] = useState(0);
   // 分割プレビューの背景（透過確認用・市松/白/黒/桃/青）
