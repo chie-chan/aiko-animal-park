@@ -91,6 +91,7 @@ export interface CellCropOverride {
   shiftY?: number;
   padX?: number;
   padY?: number;
+  zoom?: number;
 }
 
 /**
@@ -447,14 +448,16 @@ export async function splitSheetImage(
       const shiftYPx = image.height * ((override?.shiftY ?? 0) / 100);
       const padXPx = image.width * ((override?.padX ?? 0) / 100);
       const padYPx = image.height * ((override?.padY ?? 0) / 100);
+      const zoomXPx = image.width * ((override?.zoom ?? 0) / 100);
+      const zoomYPx = image.height * ((override?.zoom ?? 0) / 100);
       const baseSx = rawX + (col === 0 ? 0 : trimX);
       const baseSy = rawY + (row === 0 ? 0 : trimY);
       const baseSw = rawW - (col === 0 ? trimX : trimX * 2) + (col === lastCol ? trimX : 0);
       const baseSh = rawH - (row === 0 ? trimY : trimY * 2) + (row === lastRow ? trimY : 0);
-      const sx = clamp(baseSx + shiftXPx - padXPx, 0, Math.max(0, image.width - 1));
-      const sy = clamp(baseSy + shiftYPx - padYPx, 0, Math.max(0, image.height - 1));
-      const ex = clamp(baseSx + baseSw + shiftXPx + padXPx, sx + 1, image.width);
-      const ey = clamp(baseSy + baseSh + shiftYPx + padYPx, sy + 1, image.height);
+      const sx = clamp(baseSx + shiftXPx - padXPx + zoomXPx, 0, Math.max(0, image.width - 1));
+      const sy = clamp(baseSy + shiftYPx - padYPx + zoomYPx, 0, Math.max(0, image.height - 1));
+      const ex = clamp(baseSx + baseSw + shiftXPx + padXPx - zoomXPx, sx + 1, image.width);
+      const ey = clamp(baseSy + baseSh + shiftYPx + padYPx - zoomYPx, sy + 1, image.height);
       const sw = ex - sx;
       const sh = ey - sy;
 

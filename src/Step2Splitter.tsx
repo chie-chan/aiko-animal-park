@@ -205,17 +205,19 @@ export default function Step2Splitter(props: Props) {
       shiftY: clamp(next.shiftY ?? 0, -8, 8),
       padX: clamp(next.padX ?? 0, 0, 8),
       padY: clamp(next.padY ?? 0, 0, 8),
+      zoom: clamp(next.zoom ?? 0, -8, 8),
     };
     const active =
       Math.abs(normalized.shiftX ?? 0) > 0.05 ||
       Math.abs(normalized.shiftY ?? 0) > 0.05 ||
       Math.abs(normalized.padX ?? 0) > 0.05 ||
-      Math.abs(normalized.padY ?? 0) > 0.05;
+      Math.abs(normalized.padY ?? 0) > 0.05 ||
+      Math.abs(normalized.zoom ?? 0) > 0.05;
     return active ? normalized : null;
   }
 
   function cropOverrideFor(index: number): CellCropOverride {
-    return { shiftX: 0, shiftY: 0, padX: 0, padY: 0, ...(cellCropOverrides[index] ?? {}) };
+    return { shiftX: 0, shiftY: 0, padX: 0, padY: 0, zoom: 0, ...(cellCropOverrides[index] ?? {}) };
   }
 
   function hasCropOverride(index: number): boolean {
@@ -229,10 +231,11 @@ export default function Step2Splitter(props: Props) {
     const shiftY = override.shiftY ?? 0;
     const padX = override.padX ?? 0;
     const padY = override.padY ?? 0;
-    const x = clamp(region.x + shiftX - padX, 0, 99);
-    const y = clamp(region.y + shiftY - padY, 0, 99);
-    const right = clamp(region.x + region.w + shiftX + padX, x + 1, 100);
-    const bottom = clamp(region.y + region.h + shiftY + padY, y + 1, 100);
+    const zoom = override.zoom ?? 0;
+    const x = clamp(region.x + shiftX - padX + zoom, 0, 99);
+    const y = clamp(region.y + shiftY - padY + zoom, 0, 99);
+    const right = clamp(region.x + region.w + shiftX + padX - zoom, x + 1, 100);
+    const bottom = clamp(region.y + region.h + shiftY + padY - zoom, y + 1, 100);
     return { x, y, w: right - x, h: bottom - y };
   }
 
@@ -1571,7 +1574,18 @@ export default function Step2Splitter(props: Props) {
                 <span>{zoomCell + 1}番だけ個別対応</span>
                 {hasCropOverride(zoomCell) && <em>適用中</em>}
               </div>
-              <p>全体の線はそのまま、このコマだけ切り出し範囲を補正します。</p>
+              <p>全体の線はそのまま、このコマだけ切り出し範囲を補正します。サイズはマイナスで小さく、プラスで大きくなります。</p>
+              <label>
+                <span>サイズ <strong>{(zoomOverride.zoom ?? 0).toFixed(1)}%</strong></span>
+                <input
+                  type="range"
+                  min={-8}
+                  max={8}
+                  step={0.25}
+                  value={zoomOverride.zoom ?? 0}
+                  onChange={(event) => updateCellCropOverride(zoomCell, { zoom: Number(event.target.value) })}
+                />
+              </label>
               <label>
                 <span>横に広げる <strong>{(zoomOverride.padX ?? 0).toFixed(1)}%</strong></span>
                 <input
