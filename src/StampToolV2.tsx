@@ -215,6 +215,7 @@ export default function StampToolV2() {
   const [tabImageId, setTabImageId] = useState<string>("");
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
   const [bgPreview, setBgPreview] = useState<BgPreview>("checker");
+  const [placementSavedAt, setPlacementSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
     trackStampEvent("page_view", { tool: "stamp-v2" });
@@ -348,6 +349,21 @@ export default function StampToolV2() {
       return;
     }
     setStep((Math.max(1, step - 1) as StepId));
+  }
+
+  function savePlacementDraft(source: "manual" | "return-background") {
+    setPlacementSavedAt(Date.now());
+    trackStampEvent("placement_save", {
+      source,
+      step,
+      cellCount: splitCells.length,
+      offsetCount: Object.keys(cellOffsets).length,
+    });
+  }
+
+  function savePlacementAndReturnToBackground() {
+    savePlacementDraft("return-background");
+    setStep(3);
   }
 
   function openDesignRoomWithGuide() {
@@ -571,12 +587,24 @@ export default function StampToolV2() {
         >
           ← 戻る
         </button>
+        {(step === 4 || step === 5) && (
+          <button
+            type="button"
+            className="v2-btn-save"
+            onClick={savePlacementAndReturnToBackground}
+          >
+            保存して③へ戻る
+          </button>
+        )}
         <p className="v2-bottom-msg">
           {step === 1 && "分割シートか、完成済み画像40枚一括かを選んで取り込みます。"}
           {step === 2 && "分割シートの行数・列数と切り取り線を整えます。40枚一括ではここを飛ばします。"}
           {step === 3 && "白背景の自動透過、色クリック、消しゴムで背景を整えます。"}
           {step === 4 && "画像を自動で中央に寄せたあと、必要なコマだけ手動で位置調整します。"}
           {step === 5 && "スタンプ用または絵文字用の透過PNG ZIPを書き出します。"}
+          {placementSavedAt && (step === 3 || step === 4 || step === 5) && (
+            <span className="v2-save-status">配置保存済み</span>
+          )}
         </p>
         <span className="v2-bottom-disclaimer">
           ※LINE審査の通過を保証するものではありません <a onClick={() => setShowNotice(true)}>詳しく</a>

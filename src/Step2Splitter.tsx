@@ -627,10 +627,11 @@ export default function Step2Splitter(props: Props) {
 
   useEffect(() => {
     if (sheetSrc) {
+      if (phase === "background" && splitCells.length > 0) return;
       regenerateCells(sheetSrc);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetSrc, gridCols, gridRows]);
+  }, [sheetSrc, gridCols, gridRows, phase, splitCells.length]);
 
   // ── ファイル取り込み ────────────────────────────────
   async function handleFile(files: FileList | null) {
@@ -1486,16 +1487,23 @@ export default function Step2Splitter(props: Props) {
 
             {sidebarBgTool === "auto" && (
               <div className="v2-bg-tool-body">
-                {renderTransparentToggle()}
+                {!useSplitCellPreview && renderTransparentToggle()}
                 <button
                   type="button"
                   className="v2-bg-tool-action"
-                  disabled={processing || !sheetSrc}
-                  onClick={() => void runAutoTransparency()}
+                  disabled={processing || (!sheetSrc && splitCells.length === 0)}
+                  onClick={() => {
+                    if (useSplitCellPreview) void runBatchTransparency();
+                    else void runAutoTransparency();
+                  }}
                 >
-                  自動透過を実行
+                  {useSplitCellPreview ? "全コマを自動透過" : "自動透過を実行"}
                 </button>
-                <p>白や薄い背景が外側につながっている画像向きです。</p>
+                <p>
+                  {useSplitCellPreview
+                    ? "現在の並びと個別調整を保ったまま、各コマの端につながる背景色を透明にします。"
+                    : "白や薄い背景が外側につながっている画像向きです。"}
+                </p>
               </div>
             )}
 
@@ -1516,12 +1524,19 @@ export default function Step2Splitter(props: Props) {
                   type="button"
                   className="v2-bg-tool-action"
                   disabled={processing || !pickedColor}
-                  onClick={() => void runColorTransparency()}
+                  onClick={() => {
+                    if (useSplitCellPreview) void runBatchColorTransparency();
+                    else void runColorTransparency();
+                  }}
                 >
-                  この色でもう一度削除
+                  {useSplitCellPreview ? "この色を全コマに適用" : "この色でもう一度削除"}
                 </button>
                 {renderColorUndoButton()}
-                <p>プレビューを拡大して、消したい背景色をクリックします。似た色の範囲は許容値で調整できます。</p>
+                <p>
+                  {useSplitCellPreview
+                    ? "左のコマを開いて色を拾うと、その色を全コマにまとめて適用できます。"
+                    : "プレビューを拡大して、消したい背景色をクリックします。似た色の範囲は許容値で調整できます。"}
+                </p>
               </div>
             )}
 
