@@ -5,7 +5,7 @@ import FloatingMascot from "./FloatingMascot";
 import Step2Splitter from "./Step2Splitter";
 import Step2ReorderEdit from "./Step2ReorderEdit";
 import Step3Export from "./Step3Export";
-import { centerImageContent, defaultCuts, type CellOffset, type GridSize, type SourceImage } from "./stamp-v2-split";
+import { centerImageContent, defaultCuts, type CellCropOverride, type CellOffset, type GridSize, type SourceImage } from "./stamp-v2-split";
 import { trackStampEvent } from "./stamp-v2-analytics";
 
 const MASCOT_TIPS: Record<number, string[]> = {
@@ -148,6 +148,7 @@ export default function StampToolV2() {
   const [verticalCuts, setVerticalCuts] = useState<number[]>(() => defaultCuts(4));
   const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(4));
   const [splitCells, setSplitCells] = useState<SourceImage[]>([]);
+  const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
   const [intakeMode, setIntakeMode] = useState<IntakeMode>(null);
   const [hasAutoCentered, setHasAutoCentered] = useState<boolean>(false);
 
@@ -155,6 +156,7 @@ export default function StampToolV2() {
     if (splitCells.length === 0) {
       setIntakeMode(null);
       setHasAutoCentered(false);
+      setCellCropOverrides({});
     }
   }, [splitCells.length]);
 
@@ -188,6 +190,7 @@ export default function StampToolV2() {
       setMainImageId("");
       setTabImageId("");
       setHasAutoCentered(false);
+      setCellCropOverrides({});
     }
     if (axis === "cols") {
       setVerticalCuts(defaultCuts(next));
@@ -467,6 +470,8 @@ export default function StampToolV2() {
             setHorizontalCuts={setHorizontalCuts}
             splitCells={splitCells}
             setSplitCells={setSplitCells}
+            cellCropOverrides={cellCropOverrides}
+            setCellCropOverrides={setCellCropOverrides}
             gridCols={splitGridCols}
             gridRows={splitGridRows}
             onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
@@ -487,6 +492,8 @@ export default function StampToolV2() {
             setHorizontalCuts={setHorizontalCuts}
             splitCells={splitCells}
             setSplitCells={setSplitCells}
+            cellCropOverrides={cellCropOverrides}
+            setCellCropOverrides={setCellCropOverrides}
             gridCols={splitGridCols}
             gridRows={splitGridRows}
             onChangeGridCols={(next) => handleSplitGridChange("cols", next)}
@@ -507,6 +514,8 @@ export default function StampToolV2() {
             setHorizontalCuts={setHorizontalCuts}
             splitCells={splitCells}
             setSplitCells={setSplitCells}
+            cellCropOverrides={cellCropOverrides}
+            setCellCropOverrides={setCellCropOverrides}
             gridCols={splitGridCols}
             gridRows={splitGridRows}
             onChangeGridCols={(next) => handleSplitGridChange("cols", next)}

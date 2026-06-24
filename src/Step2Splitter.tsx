@@ -33,6 +33,8 @@ interface Props {
   setHorizontalCuts: (v: number[]) => void;
   splitCells: SourceImage[];
   setSplitCells: (v: SourceImage[]) => void;
+  cellCropOverrides: Record<number, CellCropOverride>;
+  setCellCropOverrides: (v: Record<number, CellCropOverride>) => void;
   gridCols?: GridSize;
   gridRows?: GridSize;
   onChangeGridCols?: (g: GridSize) => void;
@@ -77,6 +79,7 @@ export default function Step2Splitter(props: Props) {
     verticalCuts, setVerticalCuts,
     horizontalCuts, setHorizontalCuts,
     splitCells, setSplitCells,
+    cellCropOverrides, setCellCropOverrides,
     gridCols = 4,
     gridRows = 4,
     onChangeGridCols,
@@ -184,7 +187,6 @@ export default function Step2Splitter(props: Props) {
   const [message, setMessage] = useState("");
   const [batchProgress, setBatchProgress] = useState("");
   const [trimGutter, setTrimGutter] = useState<number>(0);
-  const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
   // 背景透過は取り込み時には実行せず、Step3で明示的に適用する。
   const [bgTransparent, setBgTransparent] = useState<boolean>(false);
   const [rawSrc, setRawSrc] = useState<string | null>(null);
