@@ -45,6 +45,15 @@ interface Props {
 
 type DragAxis = "vertical" | "horizontal";
 type BgTool = "auto" | "color" | "eraser";
+const BG_SIDEBAR_TOOLS = [
+  ["auto", "自動"],
+  ["color", "色クリック"],
+] as const;
+const BG_MODAL_TOOLS = [
+  ["auto", "自動"],
+  ["color", "色クリック"],
+  ["eraser", "消しゴム"],
+] as const;
 type BgUndoSnapshot =
   | { kind: "sheet"; src: string; bgTransparent: boolean }
   | { kind: "batch-cell"; index: number; src: string }
@@ -441,7 +450,28 @@ export default function Step2Splitter(props: Props) {
 
   function pointFromPreview(event: React.PointerEvent) {
     if (!adjustPreviewRef.current) return null;
-    const rect = adjustPreviewRef.current.getBoundingClientRect();
+    const preview = adjustPreviewRef.current;
+    const rect = preview.getBoundingClientRect();
+    const img = preview.querySelector("img");
+    if (img && img.naturalWidth > 0 && img.naturalHeight > 0 && rect.width > 0 && rect.height > 0) {
+      const previewRatio = rect.width / rect.height;
+      const imageRatio = img.naturalWidth / img.naturalHeight;
+      let renderedW = rect.width;
+      let renderedH = rect.height;
+      let offsetX = 0;
+      let offsetY = 0;
+      if (imageRatio > previewRatio) {
+        renderedH = rect.width / imageRatio;
+        offsetY = (rect.height - renderedH) / 2;
+      } else {
+        renderedW = rect.height * imageRatio;
+        offsetX = (rect.width - renderedW) / 2;
+      }
+      return {
+        x: clamp((event.clientX - rect.left - offsetX) / renderedW, 0, 1),
+        y: clamp((event.clientY - rect.top - offsetY) / renderedH, 0, 1),
+      };
+    }
     return {
       x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
       y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
@@ -818,18 +848,20 @@ export default function Step2Splitter(props: Props) {
     );
   }
 
-  function openBatchEditor(index: number) {
+  function openBatchEditor(index: number, tool: BgTool = bgTool === "auto" ? "eraser" : bgTool) {
     const cell = splitCells[index];
     if (!cell) return;
     batchEditIndexRef.current = index;
     setBatchEditIndex(index);
     eraseSourceRef.current = cell.src;
+    setBgTool(tool);
     setBgEditZoomOpen(true);
   }
 
   function closeBgEditor() {
     setBgEditZoomOpen(false);
     setErasing(false);
+    if (bgTool === "eraser") setBgTool("auto");
     if (batchEditIndexRef.current !== null) {
       batchEditIndexRef.current = null;
       setBatchEditIndex(null);
@@ -886,11 +918,7 @@ export default function Step2Splitter(props: Props) {
               )}
             </div>
             <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
-              {([
-                ["auto", "自動"],
-                ["color", "色クリック"],
-                ["eraser", "消しゴム"],
-              ] as const).map(([key, label]) => (
+              {BG_MODAL_TOOLS.map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
@@ -989,7 +1017,7 @@ export default function Step2Splitter(props: Props) {
                 >
                   <img src={cell.src} alt="" />
                   <span>{index + 1}</span>
-                  <b>編集</b>
+                  <b>消しゴム</b>
                 </button>
               ))}
             </div>
@@ -1007,18 +1035,14 @@ export default function Step2Splitter(props: Props) {
               )}
             </div>
             <p className="v2-adjust-sub">
-              自動は各画像の端の背景色を拾って一括透過します。色クリック・消しゴムは左の画像を開いて調整できます。
+              自動は各画像の端の背景色を拾って一括透過します。消しゴムは左の画像を開いて1枚ずつ調整できます。
             </p>
             <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
-              {([
-                ["auto", "自動"],
-                ["color", "色クリック"],
-                ["eraser", "消しゴム"],
-              ] as const).map(([key, label]) => (
+              {BG_SIDEBAR_TOOLS.map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
-                  className={bgTool === key ? "is-active" : ""}
+                  className={sidebarBgTool === key ? "is-active" : ""}
                   onClick={() => setBgTool(key)}
                 >
                   {renderBgToolTabLabel(key, label)}
@@ -1026,7 +1050,7 @@ export default function Step2Splitter(props: Props) {
               ))}
             </div>
 
-            {bgTool === "auto" && (
+            {sidebarBgTool === "auto" && (
               <div className="v2-bg-tool-body">
                 <button
                   type="button"
@@ -1040,7 +1064,7 @@ export default function Step2Splitter(props: Props) {
               </div>
             )}
 
-            {bgTool === "color" && (
+            {sidebarBgTool === "color" && (
               <div className="v2-bg-tool-body">
                 <label className="v2-bg-slider">
                   <span>許容値 <strong>{bgTolerance}</strong></span>
@@ -1063,23 +1087,6 @@ export default function Step2Splitter(props: Props) {
                 </button>
                 {renderColorUndoButton()}
                 <p>まず左の画像を開いて、消したい色をスポイトでクリックします。</p>
-              </div>
-            )}
-
-            {bgTool === "eraser" && (
-              <div className="v2-bg-tool-body">
-                <label className="v2-bg-slider">
-                  <span>ブラシ <strong>{eraseRadius}px</strong></span>
-                  <input
-                    type="range"
-                    min={4}
-                    max={80}
-                    step={1}
-                    value={eraseRadius}
-                    onChange={(e) => setEraseRadius(Number(e.target.value))}
-                  />
-                </label>
-                <p>左の画像をクリックして拡大し、消したい部分をドラッグします。</p>
               </div>
             )}
 
@@ -1202,6 +1209,8 @@ export default function Step2Splitter(props: Props) {
   const lastIdx = cellCount - 1;
   const showGridControls = phase !== "background";
   const showBackgroundControls = phase !== "grid";
+  const sidebarBgTool: "auto" | "color" = bgTool === "auto" ? "auto" : "color";
+  const useSplitCellPreview = phase === "background" && splitCells.length > 0;
   const zoomOverride = zoomCell === null ? null : cropOverrideFor(zoomCell);
 
   return (
@@ -1210,7 +1219,9 @@ export default function Step2Splitter(props: Props) {
         {/* LEFT: セルライブプレビュー（主役） */}
         <section className="v2-split-left">
           <div className="v2-live-head">
-            <span className="v2-live-title">シート分割プレビュー（クリックで拡大）</span>
+            <span className="v2-live-title">
+              {phase === "background" ? "背景透過プレビュー（クリックで個別消しゴム）" : "シート分割プレビュー（クリックで拡大）"}
+            </span>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
               <span style={{ fontSize: 11, color: "var(--v2-muted)", fontWeight: 700 }}>背景:</span>
               {LIVE_BGS.map((b) => (
@@ -1243,30 +1254,45 @@ export default function Step2Splitter(props: Props) {
             onPointerUp={stopDrag}
             onPointerCancel={stopDrag}
           >
-            {cellRegions.map((r, i) => (
+            {cellRegions.map((r, i) => {
+              const splitCell = splitCells[i];
+              return (
               <button
                 key={i}
                 type="button"
-                className={`v2-live-cell${hasCropOverride(i) ? " is-individual" : ""}`}
+                className={`v2-live-cell${hasCropOverride(i) ? " is-individual" : ""}${useSplitCellPreview ? " is-bg-editable" : ""}`}
                 style={{ background: liveBgCss }}
-                onClick={() => setZoomCell(i)}
-                aria-label={`${i + 1}番目のセルを拡大`}
+                onClick={() => {
+                  if (phase === "background") openBatchEditor(i);
+                  else setZoomCell(i);
+                }}
+                aria-label={phase === "background" ? `${i + 1}番目の画像を消しゴムで編集` : `${i + 1}番目のセルを拡大`}
               >
                 <span className="v2-live-cell-num">{i + 1}</span>
                 {hasCropOverride(i) && <span className="v2-live-cell-badge">個別</span>}
-                <img
-                  src={sheetSrc}
-                  alt=""
-                  style={{
-                    width: `${10000 / r.w}%`,
-                    height: `${10000 / r.h}%`,
-                    left: `-${(r.x / r.w) * 100}%`,
-                    top: `-${(r.y / r.h) * 100}%`,
-                  }}
-                />
+                {useSplitCellPreview && splitCell ? (
+                  <img
+                    className="v2-live-cell-contained"
+                    src={splitCell.src}
+                    alt=""
+                  />
+                ) : (
+                  <img
+                    src={sheetSrc}
+                    alt=""
+                    style={{
+                      width: `${10000 / r.w}%`,
+                      height: `${10000 / r.h}%`,
+                      left: `-${(r.x / r.w) * 100}%`,
+                      top: `-${(r.y / r.h) * 100}%`,
+                    }}
+                  />
+                )}
+                {phase === "background" && <b className="v2-live-cell-action">消しゴム</b>}
               </button>
-            ))}
-            {vLines.map((pct, i) => (
+              );
+            })}
+            {showGridControls && vLines.map((pct, i) => (
               <button
                 key={`live-v-${i}`}
                 type="button"
@@ -1276,7 +1302,7 @@ export default function Step2Splitter(props: Props) {
                 onPointerDown={(e) => startDrag(e, "vertical", i, liveGridRef.current)}
               />
             ))}
-            {hLines.map((pct, i) => (
+            {showGridControls && hLines.map((pct, i) => (
               <button
                 key={`live-h-${i}`}
                 type="button"
@@ -1294,7 +1320,7 @@ export default function Step2Splitter(props: Props) {
           <h4 className="v2-adjust-title">{phase === "background" ? "背景透過" : "グリッドを整える"}</h4>
           <p className="v2-adjust-sub">
             {phase === "background"
-              ? "白背景は自動で透過できます。必要なときだけ色クリックや消しゴムを使います。"
+              ? "白背景は自動で透過できます。色クリックは右、消しゴムは左の画像を開いて1枚ずつ調整します。"
               : "縦横の数を選び、必要ならプレビュー上の線をドラッグして微調整します。"}
           </p>
 
@@ -1377,7 +1403,7 @@ export default function Step2Splitter(props: Props) {
               )}
             </div>
             <div
-              className={`v2-bg-edit-preview${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
+              className={`v2-bg-edit-preview${sidebarBgTool === "color" ? " is-picking" : ""}`}
               role="button"
               tabIndex={0}
               onClick={() => setBgEditZoomOpen(true)}
@@ -1393,18 +1419,13 @@ export default function Step2Splitter(props: Props) {
               <span className="v2-bg-edit-open">拡大して編集</span>
             </div>
             <div className="v2-bg-tool-tabs" role="group" aria-label="背景削除モード">
-              {([
-                ["auto", "自動"],
-                ["color", "色クリック"],
-                ["eraser", "消しゴム"],
-              ] as const).map(([key, label]) => (
+              {BG_SIDEBAR_TOOLS.map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
-                  className={bgTool === key ? "is-active" : ""}
+                  className={sidebarBgTool === key ? "is-active" : ""}
                   onClick={() => {
                     setBgTool(key);
-                    if (key !== "auto") setAdvancedOpen(true);
                   }}
                 >
                   {renderBgToolTabLabel(key, label)}
@@ -1412,7 +1433,7 @@ export default function Step2Splitter(props: Props) {
               ))}
             </div>
 
-            {bgTool === "auto" && (
+            {sidebarBgTool === "auto" && (
               <div className="v2-bg-tool-body">
                 {renderTransparentToggle()}
                 <button
@@ -1427,7 +1448,7 @@ export default function Step2Splitter(props: Props) {
               </div>
             )}
 
-            {bgTool === "color" && (
+            {sidebarBgTool === "color" && (
               <div className="v2-bg-tool-body">
                 <label className="v2-bg-slider">
                   <span>許容値 <strong>{bgTolerance}</strong></span>
@@ -1453,22 +1474,6 @@ export default function Step2Splitter(props: Props) {
               </div>
             )}
 
-            {bgTool === "eraser" && (
-              <div className="v2-bg-tool-body">
-                <label className="v2-bg-slider">
-                  <span>ブラシ <strong>{eraseRadius}px</strong></span>
-                  <input
-                    type="range"
-                    min={4}
-                    max={80}
-                    step={1}
-                    value={eraseRadius}
-                    onChange={(e) => setEraseRadius(Number(e.target.value))}
-                  />
-                </label>
-                <p>プレビューを拡大して画像上をなぞると、その部分だけ手動で透明になります。</p>
-              </div>
-            )}
           </div>
           )}
 
