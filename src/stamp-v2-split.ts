@@ -86,6 +86,13 @@ export interface CellOffset {
   scale?: number; // 1 = original fit size
 }
 
+export interface CellCropOverride {
+  shiftX?: number;
+  shiftY?: number;
+  padX?: number;
+  padY?: number;
+}
+
 /**
  * セル画像を指定サイズに収めて透過PNGとして書き出す（中央寄せ、余白は透過）。
  * offset を渡すと、中央位置から指定% だけずらし、必要なら拡大して描画する。
@@ -405,6 +412,7 @@ export async function splitSheetImage(
   horizontalCuts: number[],
   gridCols: GridSize = 4,
   gridRows: GridSize = 4,
+  cellOverrides: Record<number, CellCropOverride> = {},
 ): Promise<SourceImage[]> {
   const image = await loadImage(src);
   const left = outerPadding;
@@ -429,14 +437,26 @@ export async function splitSheetImage(
   const lastRow = gridRows - 1;
   for (let row = 0; row < gridRows; row += 1) {
     for (let col = 0; col < gridCols; col += 1) {
+      const cellIndex = cells.length;
       const rawX = (image.width * xBoundaries[col]) / 100;
       const rawY = (image.height * yBoundaries[row]) / 100;
       const rawW = (image.width * (xBoundaries[col + 1] - xBoundaries[col])) / 100;
       const rawH = (image.height * (yBoundaries[row + 1] - yBoundaries[row])) / 100;
-      const sx = rawX + (col === 0 ? 0 : trimX);
-      const sy = rawY + (row === 0 ? 0 : trimY);
-      const sw = rawW - (col === 0 ? trimX : trimX * 2) + (col === lastCol ? trimX : 0);
-      const sh = rawH - (row === 0 ? trimY : trimY * 2) + (row === lastRow ? trimY : 0);
+      const override = cellOverrides[cellIndex];
+      const shiftXPx = image.width * ((override?.shiftX ?? 0) / 100);
+      const shiftYPx = image.height * ((override?.shiftY ?? 0) / 100);
+      const padXPx = image.width * ((override?.padX ?? 0) / 100);
+      const padYPx = image.height * ((override?.padY ?? 0) / 100);
+      const baseSx = rawX + (col === 0 ? 0 : trimX);
+      const baseSy = rawY + (row === 0 ? 0 : trimY);
+      const baseSw = rawW - (col === 0 ? trimX : trimX * 2) + (col === lastCol ? trimX : 0);
+      const baseSh = rawH - (row === 0 ? trimY : trimY * 2) + (row === lastRow ? trimY : 0);
+      const sx = clamp(baseSx + shiftXPx - padXPx, 0, Math.max(0, image.width - 1));
+      const sy = clamp(baseSy + shiftYPx - padYPx, 0, Math.max(0, image.height - 1));
+      const ex = clamp(baseSx + baseSw + shiftXPx + padXPx, sx + 1, image.width);
+      const ey = clamp(baseSy + baseSh + shiftYPx + padYPx, sy + 1, image.height);
+      const sw = ex - sx;
+      const sh = ey - sy;
 
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(sw));

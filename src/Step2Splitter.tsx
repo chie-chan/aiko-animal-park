@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  type CellCropOverride,
   type GridSize,
   type SourceImage,
   clamp,
@@ -183,6 +184,7 @@ export default function Step2Splitter(props: Props) {
   const [message, setMessage] = useState("");
   const [batchProgress, setBatchProgress] = useState("");
   const [trimGutter, setTrimGutter] = useState<number>(0);
+  const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
   // 背景透過は取り込み時には実行せず、Step3で明示的に適用する。
   const [bgTransparent, setBgTransparent] = useState<boolean>(false);
   const [rawSrc, setRawSrc] = useState<string | null>(null);
@@ -196,6 +198,43 @@ export default function Step2Splitter(props: Props) {
   // 分割プレビューの背景（透過確認用・市松/白/黒/桃/青）
   const [liveBg, setLiveBg] = useState<string>("checker");
   const liveBgCss = (LIVE_BGS.find((b) => b.key === liveBg) ?? LIVE_BGS[0]).css;
+
+  function normalizeCropOverride(next: CellCropOverride): CellCropOverride | null {
+    const normalized: CellCropOverride = {
+      shiftX: clamp(next.shiftX ?? 0, -8, 8),
+      shiftY: clamp(next.shiftY ?? 0, -8, 8),
+      padX: clamp(next.padX ?? 0, 0, 8),
+      padY: clamp(next.padY ?? 0, 0, 8),
+    };
+    const active =
+      Math.abs(normalized.shiftX ?? 0) > 0.05 ||
+      Math.abs(normalized.shiftY ?? 0) > 0.05 ||
+      Math.abs(normalized.padX ?? 0) > 0.05 ||
+      Math.abs(normalized.padY ?? 0) > 0.05;
+    return active ? normalized : null;
+  }
+
+  function cropOverrideFor(index: number): CellCropOverride {
+    return { shiftX: 0, shiftY: 0, padX: 0, padY: 0, ...(cellCropOverrides[index] ?? {}) };
+  }
+
+  function hasCropOverride(index: number): boolean {
+    return Boolean(cellCropOverrides[index]);
+  }
+
+  function applyCropOverrideToRegion(region: CellRegion, index: number): CellRegion {
+    const override = cellCropOverrides[index];
+    if (!override) return region;
+    const shiftX = override.shiftX ?? 0;
+    const shiftY = override.shiftY ?? 0;
+    const padX = override.padX ?? 0;
+    const padY = override.padY ?? 0;
+    const x = clamp(region.x + shiftX - padX, 0, 99);
+    const y = clamp(region.y + shiftY - padY, 0, 99);
+    const right = clamp(region.x + region.w + shiftX + padX, x + 1, 100);
+    const bottom = clamp(region.y + region.h + shiftY + padY, y + 1, 100);
+    return { x, y, w: right - x, h: bottom - y };
+  }
 
   useEffect(() => {
     splitCellsRef.current = splitCells;
@@ -315,6 +354,7 @@ export default function Step2Splitter(props: Props) {
   // 取り込み時は元画像のまま sheetSrc にセットする。背景透過はStep3で行う。
   async function applyUploadedSrc(url: string) {
     clearBgUndoStack();
+    setCellCropOverrides({});
     setRawSrc(url);
     setBgTransparent(false);
     setSheetSrc(url);
@@ -482,19 +522,23 @@ export default function Step2Splitter(props: Props) {
         const rightTrim = col === lastCol ? 0 : trimHalf;
         const topTrim = row === 0 ? 0 : trimHalf;
         const bottomTrim = row === lastRow ? 0 : trimHalf;
-        list.push({
+        const region = {
           x: baseX + leftTrim,
           y: baseY + topTrim,
           w: baseW - leftTrim - rightTrim,
           h: baseH - topTrim - bottomTrim,
-        });
+        };
+        list.push(applyCropOverrideToRegion(region, list.length));
       }
     }
     return list;
-  }, [verticalCuts, horizontalCuts, trimGutter, gridCols, gridRows]);
+  }, [verticalCuts, horizontalCuts, trimGutter, gridCols, gridRows, cellCropOverrides]);
 
   // ── PNG実体を再生成（アップロード時・ドラッグ確定時） ──
-  async function regenerateCells(src: string) {
+  async function regenerateCells(
+    src: string,
+    overrides: Record<number, CellCropOverride> = cellCropOverrides,
+  ) {
     try {
       const cells = await splitSheetImage(
         src,
@@ -504,6 +548,7 @@ export default function Step2Splitter(props: Props) {
         horizontalCuts,
         gridCols,
         gridRows,
+        overrides,
       );
       setSplitCells(cells);
       setMessage("");
@@ -515,6 +560,23 @@ export default function Step2Splitter(props: Props) {
 
   // シート画像アップロード時／グリッドサイズ変更時に即座に分割。
   // 40枚一括取り込みでは sheetSrc を使わないため、sheetSrc=null でも splitCells は消さない。
+  function updateCellCropOverride(index: number, patch: Partial<CellCropOverride>) {
+    const current = cropOverrideFor(index);
+    const normalized = normalizeCropOverride({ ...current, ...patch });
+    const next = { ...cellCropOverrides };
+    if (normalized) next[index] = normalized;
+    else delete next[index];
+    setCellCropOverrides(next);
+    if (sheetSrc) void regenerateCells(sheetSrc, next);
+  }
+
+  function resetCellCropOverride(index: number) {
+    const next = { ...cellCropOverrides };
+    delete next[index];
+    setCellCropOverrides(next);
+    if (sheetSrc) void regenerateCells(sheetSrc, next);
+  }
+
   useEffect(() => {
     if (sheetSrc) {
       regenerateCells(sheetSrc);
@@ -545,6 +607,7 @@ export default function Step2Splitter(props: Props) {
     setMessage("");
     clearBgUndoStack();
     setSheetSrc(null);
+    setCellCropOverrides({});
     setRawSrc(null);
     setPickedColor(null);
     onImportModeChange?.("batch");
@@ -714,7 +777,8 @@ export default function Step2Splitter(props: Props) {
   function resetCuts() {
     setVerticalCuts(defaultCuts(gridCols));
     setHorizontalCuts(defaultCuts(gridRows));
-    if (sheetSrc) regenerateCells(sheetSrc);
+    setCellCropOverrides({});
+    if (sheetSrc) regenerateCells(sheetSrc, {});
   }
 
   // ── キーボード（ESC・矢印） ───────────────────────────
@@ -1133,6 +1197,7 @@ export default function Step2Splitter(props: Props) {
   const lastIdx = cellCount - 1;
   const showGridControls = phase !== "background";
   const showBackgroundControls = phase !== "grid";
+  const zoomOverride = zoomCell === null ? null : cropOverrideFor(zoomCell);
 
   return (
     <>
@@ -1177,12 +1242,13 @@ export default function Step2Splitter(props: Props) {
               <button
                 key={i}
                 type="button"
-                className="v2-live-cell"
+                className={`v2-live-cell${hasCropOverride(i) ? " is-individual" : ""}`}
                 style={{ background: liveBgCss }}
                 onClick={() => setZoomCell(i)}
                 aria-label={`${i + 1}番目のセルを拡大`}
               >
                 <span className="v2-live-cell-num">{i + 1}</span>
+                {hasCropOverride(i) && <span className="v2-live-cell-badge">個別</span>}
                 <img
                   src={sheetSrc}
                   alt=""
@@ -1455,7 +1521,8 @@ export default function Step2Splitter(props: Props) {
             if (e.target === e.currentTarget) setZoomCell(null);
           }}
         >
-          <div className="v2-cell-zoom-inner" style={{ background: liveBgCss }} onClick={(e) => e.stopPropagation()}>
+          <div className="v2-cell-zoom-layout" onClick={(e) => e.stopPropagation()}>
+          <div className="v2-cell-zoom-inner" style={{ background: liveBgCss }}>
             <button
               type="button"
               className="v2-cell-zoom-close"
@@ -1497,6 +1564,68 @@ export default function Step2Splitter(props: Props) {
             <span className="v2-cell-zoom-label">
               {zoomCell + 1} / {cellCount}　← → キーで切替、ESCで閉じる
             </span>
+          </div>
+          {zoomOverride && (
+            <div className="v2-cell-individual-panel">
+              <div className="v2-cell-individual-head">
+                <span>{zoomCell + 1}番だけ個別対応</span>
+                {hasCropOverride(zoomCell) && <em>適用中</em>}
+              </div>
+              <p>全体の線はそのまま、このコマだけ切り出し範囲を補正します。</p>
+              <label>
+                <span>横に広げる <strong>{(zoomOverride.padX ?? 0).toFixed(1)}%</strong></span>
+                <input
+                  type="range"
+                  min={0}
+                  max={8}
+                  step={0.25}
+                  value={zoomOverride.padX ?? 0}
+                  onChange={(event) => updateCellCropOverride(zoomCell, { padX: Number(event.target.value) })}
+                />
+              </label>
+              <label>
+                <span>縦に広げる <strong>{(zoomOverride.padY ?? 0).toFixed(1)}%</strong></span>
+                <input
+                  type="range"
+                  min={0}
+                  max={8}
+                  step={0.25}
+                  value={zoomOverride.padY ?? 0}
+                  onChange={(event) => updateCellCropOverride(zoomCell, { padY: Number(event.target.value) })}
+                />
+              </label>
+              <label>
+                <span>左右にずらす <strong>{(zoomOverride.shiftX ?? 0).toFixed(1)}%</strong></span>
+                <input
+                  type="range"
+                  min={-8}
+                  max={8}
+                  step={0.25}
+                  value={zoomOverride.shiftX ?? 0}
+                  onChange={(event) => updateCellCropOverride(zoomCell, { shiftX: Number(event.target.value) })}
+                />
+              </label>
+              <label>
+                <span>上下にずらす <strong>{(zoomOverride.shiftY ?? 0).toFixed(1)}%</strong></span>
+                <input
+                  type="range"
+                  min={-8}
+                  max={8}
+                  step={0.25}
+                  value={zoomOverride.shiftY ?? 0}
+                  onChange={(event) => updateCellCropOverride(zoomCell, { shiftY: Number(event.target.value) })}
+                />
+              </label>
+              <button
+                type="button"
+                className="v2-cell-individual-reset"
+                onClick={() => resetCellCropOverride(zoomCell)}
+                disabled={!hasCropOverride(zoomCell)}
+              >
+                このコマの個別対応を解除
+              </button>
+            </div>
+          )}
           </div>
         </div>
       )}
