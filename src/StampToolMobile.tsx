@@ -29,6 +29,7 @@ const MOBILE_FEATURED_IDS = [
   "sticker-solid",  // シンプル
   "cookie-cutter",  // クッキー枠
   "fruit-frame",    // 果物
+  "simple",         // シンプル
 ];
 
 // ペット種類とアイコン
