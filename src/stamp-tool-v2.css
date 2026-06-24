@@ -2914,6 +2914,46 @@
   display: block;
 }
 
+/* Step 5: keep the ZIP action reachable in the compact right panel. */
+.v2-export-right {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto !important;
+  max-height: 100% !important;
+  align-self: stretch;
+}
+.v2-export-right .v2-meta-tab-row {
+  margin-bottom: 10px;
+}
+.v2-export-right .v2-meta-preview {
+  width: min(100%, 168px);
+  margin: 8px auto 10px;
+  aspect-ratio: auto;
+}
+.v2-export-right .v2-meta-preview.main {
+  width: min(100%, 156px);
+  height: 156px;
+  aspect-ratio: auto;
+}
+.v2-export-right .v2-meta-preview.tab {
+  width: min(100%, 156px);
+  height: 120px;
+  aspect-ratio: auto;
+}
+.v2-export-right .v2-meta-strip {
+  max-height: 44px;
+  margin-bottom: 2px;
+}
+.v2-export-right .v2-btn-zip {
+  position: sticky;
+  bottom: 8px;
+  z-index: 4;
+  margin-top: 10px !important;
+}
+.v2-export-right .v2-export-spec-list {
+  display: none;
+}
+
 .v2-btn-zip {
   display: flex;
   align-items: center;
