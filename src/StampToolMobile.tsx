@@ -24,12 +24,12 @@ const GRID = 3;
 const CELL_COUNT = GRID * GRID;
 type StepId = 1 | 2 | 3;
 
-// モバイル版に出すおすすめフレーム（厳選3種、サムネは商品サムネに差し替え済み）
+// モバイル版に出すおすすめフレーム（サムネは商品サムネに差し替え済み）
 const MOBILE_FEATURED_IDS = [
-  "sticker-solid",  // シンプル
+  "simple",         // シンプル
+  "sticker-solid",  // シール風
   "cookie-cutter",  // クッキー枠
   "fruit-frame",    // 果物
-  "simple",         // シンプル
 ];
 
 // ペット種類とアイコン
