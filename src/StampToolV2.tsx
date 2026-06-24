@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import "./stamp-tool-v2.css";
 import { FRAME_DESIGNS, getDefaultStampTextLines, type FrameDesign, type PetKind, type PetKindOrNone } from "./stamp-v2-frames";
 import FloatingMascot from "./FloatingMascot";
@@ -47,6 +47,11 @@ type StepId = 1 | 2 | 3 | 4 | 5;
 type IntakeMode = "sheet" | "batch" | null;
 type DesignRoomGuideStep = 0 | 1 | 2 | 3 | 4 | 5;
 export type BgPreview = "checker" | "white" | "black" | "pink" | "blue";
+type SpotlightPlacement = {
+  left: number;
+  top: number;
+  arrowLeft: number;
+};
 
 const GRID_SIZES = [1, 2, 3, 4, 5] as GridSize[];
 
@@ -78,6 +83,8 @@ export default function StampToolV2() {
   const [showStartSpotlight, setShowStartSpotlight] = useState<boolean>(true);
   const [showGuide, setShowGuide] = useState<boolean>(false);
   const [showNotice, setShowNotice] = useState<boolean>(false);
+  const startSpotlightTargetRef = useRef<HTMLDivElement | null>(null);
+  const [startSpotlightPlacement, setStartSpotlightPlacement] = useState<SpotlightPlacement | null>(null);
   const [designRoomGuideStep, setDesignRoomGuideStep] = useState<DesignRoomGuideStep>(0);
   const [selectedFrameId, setSelectedFrameId] = useState<string>(FRAME_DESIGNS[0].id);
   const [petKind, setPetKind] = useState<PetKindOrNone>(null);
@@ -230,6 +237,66 @@ export default function StampToolV2() {
   const nextStep = nextStepForCurrent();
   const canGoNext = nextStep !== null && splitCells.length > 0;
   const hasOpenOverlay = showStartSpotlight || showGuide || showNotice || showDesignRoom;
+  const startSpotlightStyle = startSpotlightPlacement
+    ? ({
+        "--v2-spotlight-left": `${startSpotlightPlacement.left}px`,
+        "--v2-spotlight-top": `${startSpotlightPlacement.top}px`,
+        "--v2-spotlight-arrow-left": `${startSpotlightPlacement.arrowLeft}px`,
+      } as CSSProperties)
+    : undefined;
+
+  useEffect(() => {
+    if (!showStartSpotlight) return;
+
+    let frameId = 0;
+    let timeoutId = 0;
+    const gutter = 16;
+    const maxCardWidth = 320;
+    const estimatedCardHeight = 220;
+
+    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+    const updatePlacement = () => {
+      if (frameId) window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        const target = startSpotlightTargetRef.current;
+        if (!target) return;
+
+        const rect = target.getBoundingClientRect();
+        const cardWidth = Math.min(maxCardWidth, window.innerWidth - gutter * 2);
+        const targetCenter = rect.left + rect.width / 2;
+        const left = clamp(targetCenter - cardWidth / 2, gutter, window.innerWidth - cardWidth - gutter);
+        const top = clamp(rect.bottom + 32, gutter, window.innerHeight - estimatedCardHeight - gutter);
+        const arrowLeft = clamp(targetCenter - left, 28, cardWidth - 28);
+
+        setStartSpotlightPlacement((current) => {
+          const next = { left, top, arrowLeft };
+          if (
+            current &&
+            Math.abs(current.left - next.left) < 0.5 &&
+            Math.abs(current.top - next.top) < 0.5 &&
+            Math.abs(current.arrowLeft - next.arrowLeft) < 0.5
+          ) {
+            return current;
+          }
+          return next;
+        });
+      });
+    };
+
+    updatePlacement();
+    timeoutId = window.setTimeout(updatePlacement, 120);
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+
+    return () => {
+      if (frameId) window.cancelAnimationFrame(frameId);
+      if (timeoutId) window.clearTimeout(timeoutId);
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [showStartSpotlight]);
 
   // 取り込み直後に編集へ進むときは、進み方に関係なく各セルの中身を自動で中央寄せする。
   const [centering, setCentering] = useState<boolean>(false);
@@ -389,7 +456,10 @@ export default function StampToolV2() {
         >
           使い方
         </button>
-        <div className={`v2-topbar-start${showStartSpotlight ? " is-spotlight-target" : ""}`}>
+        <div
+          ref={startSpotlightTargetRef}
+          className={`v2-topbar-start${showStartSpotlight ? " is-spotlight-target" : ""}`}
+        >
           <button
             type="button"
             className="v2-topbar-tool-btn"
@@ -559,6 +629,7 @@ export default function StampToolV2() {
         <div className="v2-spotlight-overlay" onClick={() => setShowStartSpotlight(false)}>
           <div
             className="v2-spotlight-card"
+            style={startSpotlightStyle}
             onClick={(event) => event.stopPropagation()}
           >
             <span>START</span>

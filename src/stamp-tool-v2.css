@@ -3090,9 +3090,9 @@
   cursor: pointer;
 }
 .v2-spotlight-card {
-  position: absolute;
-  top: 132px;
-  right: 92px;
+  position: fixed;
+  top: var(--v2-spotlight-top, 132px);
+  left: var(--v2-spotlight-left, calc(100vw - 412px));
   width: min(320px, calc(100vw - 32px));
   padding: 18px 18px 16px;
   border-radius: 16px;
@@ -3105,13 +3105,13 @@
   content: "";
   position: absolute;
   top: -9px;
-  right: 36px;
+  left: var(--v2-spotlight-arrow-left, calc(100% - 45px));
   width: 18px;
   height: 18px;
   background: #fff;
   border-left: 1.5px solid var(--v2-pink-soft);
   border-top: 1.5px solid var(--v2-pink-soft);
-  transform: rotate(45deg);
+  transform: translateX(-50%) rotate(45deg);
 }
 .v2-spotlight-card span {
   display: inline-flex;
@@ -3440,10 +3440,9 @@
     align-items: center;
   }
   .v2-spotlight-card {
-    top: 122px;
-    right: 14px;
-    left: 14px;
-    width: auto;
+    top: var(--v2-spotlight-top, 122px);
+    left: var(--v2-spotlight-left, 14px);
+    width: min(320px, calc(100vw - 28px));
   }
   .v2-guide-flow {
     flex-direction: column;
