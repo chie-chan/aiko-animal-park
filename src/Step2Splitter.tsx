@@ -189,6 +189,9 @@ export default function Step2Splitter(props: Props) {
   const eraseBusyRef = useRef(false);
   const bgUndoStackRef = useRef<BgUndoSnapshot[]>([]);
   const bgEditStartSrcRef = useRef<string | null>(null);
+  const bgStepResetCellsRef = useRef<SourceImage[] | null>(null);
+  const bgColorSourceRef = useRef<string | null>(null);
+  const bgBatchColorBaseRef = useRef<SourceImage[] | null>(null);
   const [drag, setDrag] = useState<{ axis: DragAxis; index: number } | null>(null);
   const [erasing, setErasing] = useState(false);
   const [zoomCell, setZoomCell] = useState<number | null>(null);
@@ -207,6 +210,7 @@ export default function Step2Splitter(props: Props) {
   const [eraseRadius, setEraseRadius] = useState<number>(10);
   const [pickedColor, setPickedColor] = useState<RgbColor | null>(null);
   const [bgUndoCount, setBgUndoCount] = useState(0);
+  const [bgResetReady, setBgResetReady] = useState(false);
   // 分割プレビューの背景（透過確認用・市松/白/黒/桃/青）
   const [liveBg, setLiveBg] = useState<string>("checker");
   const liveBgCss = (LIVE_BGS.find((b) => b.key === liveBg) ?? LIVE_BGS[0]).css;
@@ -254,6 +258,21 @@ export default function Step2Splitter(props: Props) {
   useEffect(() => {
     splitCellsRef.current = splitCells;
   }, [splitCells]);
+
+  useEffect(() => {
+    if (phase !== "background") {
+      bgStepResetCellsRef.current = null;
+      bgColorSourceRef.current = null;
+      bgBatchColorBaseRef.current = null;
+      setBgResetReady(false);
+      return;
+    }
+    if (splitCells.length > 0 && bgStepResetCellsRef.current?.length !== splitCells.length) {
+      bgStepResetCellsRef.current = splitCells.map((cell) => ({ ...cell }));
+      bgBatchColorBaseRef.current = null;
+      setBgResetReady(true);
+    }
+  }, [phase, splitCells]);
 
   useEffect(() => {
     batchEditIndexRef.current = batchEditIndex;
@@ -322,6 +341,8 @@ export default function Step2Splitter(props: Props) {
     if (!snapshot) return;
     syncBgUndoStack(stack.slice(0, -1));
     setBatchProgress("");
+    bgColorSourceRef.current = null;
+    bgBatchColorBaseRef.current = null;
 
     if (snapshot.kind === "sheet") {
       setBgTransparent(snapshot.bgTransparent);
@@ -337,6 +358,8 @@ export default function Step2Splitter(props: Props) {
       setSplitCells(snapshot.cells);
       const index = batchEditIndexRef.current;
       eraseSourceRef.current = index !== null ? snapshot.cells[index]?.src ?? null : null;
+      bgColorSourceRef.current = null;
+      bgBatchColorBaseRef.current = null;
     }
 
     setMessage("1つ前に戻しました。");
@@ -350,8 +373,28 @@ export default function Step2Splitter(props: Props) {
     if (startSrc !== currentSrc) pushBgUndo(createActiveUndoSnapshot(currentSrc));
     eraseQueueRef.current = [];
     setActiveEditSource(startSrc);
+    bgColorSourceRef.current = startSrc;
+    bgBatchColorBaseRef.current = null;
     setErasing(false);
     setMessage("この編集を開いた時点に戻しました。");
+  }
+
+  function resetAllBackgroundTransparency() {
+    if (processing || eraseBusyRef.current) return;
+    const baseline = bgStepResetCellsRef.current;
+    if (!baseline?.length) return;
+    pushBgUndo({ kind: "batch-all", cells: splitCellsRef.current.map((cell) => ({ ...cell })) });
+    const next = baseline.map((cell) => ({ ...cell }));
+    splitCellsRef.current = next;
+    setSplitCells(next);
+    eraseQueueRef.current = [];
+    const index = batchEditIndexRef.current;
+    eraseSourceRef.current = index !== null ? next[index]?.src ?? null : null;
+    bgColorSourceRef.current = null;
+    bgBatchColorBaseRef.current = null;
+    setPickedColor(null);
+    setBatchProgress("");
+    setMessage("背景透過をリセットしました。");
   }
 
   function renderColorUndoButton() {
@@ -381,6 +424,10 @@ export default function Step2Splitter(props: Props) {
   // 取り込み時は元画像のまま sheetSrc にセットする。背景透過はStep3で行う。
   async function applyUploadedSrc(url: string) {
     clearBgUndoStack();
+    bgStepResetCellsRef.current = null;
+    bgColorSourceRef.current = null;
+    bgBatchColorBaseRef.current = null;
+    setBgResetReady(false);
     setCellCropOverrides({});
     setRawSrc(url);
     setBgTransparent(false);
@@ -392,6 +439,8 @@ export default function Step2Splitter(props: Props) {
   async function toggleBgTransparent(next: boolean) {
     setBgTransparent(next);
     if (!rawSrc) return;
+    bgColorSourceRef.current = null;
+    bgBatchColorBaseRef.current = null;
     if (!next) {
       setSheetSrc(rawSrc);
       return;
@@ -414,6 +463,8 @@ export default function Step2Splitter(props: Props) {
   async function runAutoTransparency(source = getAutoTransparencySource()) {
     if (!source) return;
     const editingBatch = batchEditIndexRef.current !== null;
+    bgColorSourceRef.current = null;
+    bgBatchColorBaseRef.current = null;
     trackStampEvent("background_auto", {
       target: editingBatch ? "batch-cell" : "sheet",
       tolerance: bgTolerance,
@@ -435,14 +486,15 @@ export default function Step2Splitter(props: Props) {
     }
   }
 
-  async function runColorTransparency(color = pickedColor, source = getActiveEditSource()) {
-    if (!source || !color) return;
+  async function runColorTransparency(color = pickedColor, source = bgColorSourceRef.current ?? getActiveEditSource()) {
+    const currentSource = getActiveEditSource();
+    if (!source || !color || !currentSource) return;
     const editingBatch = batchEditIndexRef.current !== null;
     trackStampEvent("background_color", {
       target: editingBatch ? "batch-cell" : "sheet",
       tolerance: bgTolerance,
     });
-    pushBgUndo(createActiveUndoSnapshot(source));
+    pushBgUndo(createActiveUndoSnapshot(currentSource));
     if (!editingBatch) setBgTransparent(true);
     setProcessing(true);
     setMessage("選んだ色の背景を透過しています…");
@@ -501,6 +553,7 @@ export default function Step2Splitter(props: Props) {
       return;
     }
     setPickedColor(color);
+    bgColorSourceRef.current = source;
     await runColorTransparency(color, source);
   }
 
@@ -655,6 +708,10 @@ export default function Step2Splitter(props: Props) {
     setBatchProgress(`0 / ${limited.length} 枚を処理中…`);
     setMessage("");
     clearBgUndoStack();
+    bgStepResetCellsRef.current = null;
+    bgColorSourceRef.current = null;
+    bgBatchColorBaseRef.current = null;
+    setBgResetReady(false);
     setSheetSrc(null);
     setCellCropOverrides({});
     setRawSrc(null);
@@ -692,6 +749,9 @@ export default function Step2Splitter(props: Props) {
   async function runBatchTransparency() {
     if (!splitCells.length || processing) return;
     trackStampEvent("background_batch_auto", { cellCount: splitCells.length });
+    bgColorSourceRef.current = null;
+    bgBatchColorBaseRef.current = null;
+    pushBgUndo({ kind: "batch-all", cells: splitCellsRef.current.map((cell) => ({ ...cell })) });
     setProcessing(true);
     setBatchProgress(`0 / ${splitCells.length} 枚を透過中…`);
     setMessage("");
@@ -703,6 +763,7 @@ export default function Step2Splitter(props: Props) {
         const src = await makeEdgeBackgroundTransparent(cell.src);
         next.push({ ...cell, src });
       }
+      splitCellsRef.current = next;
       setSplitCells(next);
       setBatchProgress("");
       setMessage(`${next.length}枚の背景透過を更新しました。`);
@@ -717,19 +778,25 @@ export default function Step2Splitter(props: Props) {
 
   async function runBatchColorTransparency(color = pickedColor) {
     if (!splitCells.length || !color || processing) return;
+    const currentCells = splitCellsRef.current.map((cell) => ({ ...cell }));
+    const baseCells =
+      bgBatchColorBaseRef.current?.length === currentCells.length
+        ? bgBatchColorBaseRef.current
+        : currentCells;
+    bgBatchColorBaseRef.current = baseCells.map((cell) => ({ ...cell }));
     trackStampEvent("background_batch_color", {
       cellCount: splitCells.length,
       tolerance: bgTolerance,
     });
-    pushBgUndo({ kind: "batch-all", cells: splitCellsRef.current.map((cell) => ({ ...cell })) });
+    pushBgUndo({ kind: "batch-all", cells: currentCells });
     setProcessing(true);
     setBatchProgress(`0 / ${splitCells.length} 枚を色指定で透過中…`);
     setMessage("");
     try {
       const next: SourceImage[] = [];
-      for (let i = 0; i < splitCells.length; i += 1) {
+      for (let i = 0; i < baseCells.length; i += 1) {
         setBatchProgress(`${i + 1} / ${splitCells.length} 枚を色指定で透過中…`);
-        const cell = splitCells[i];
+        const cell = baseCells[i];
         const src = await makeImageTransparent(cell.src, {
           targetColor: color,
           tolerance: bgTolerance,
@@ -1144,6 +1211,15 @@ export default function Step2Splitter(props: Props) {
               </div>
             )}
 
+            <button
+              type="button"
+              className="v2-bg-tool-secondary"
+              disabled={processing || !bgResetReady}
+              onClick={resetAllBackgroundTransparency}
+            >
+              背景透過リセット
+            </button>
+
             {batchProgress && <p className="v2-toolbar-note">{batchProgress}</p>}
             {message && <p className="v2-toolbar-note">{message}</p>}
           </section>
@@ -1539,6 +1615,15 @@ export default function Step2Splitter(props: Props) {
                 </p>
               </div>
             )}
+
+            <button
+              type="button"
+              className="v2-bg-tool-secondary"
+              disabled={processing || !bgResetReady}
+              onClick={resetAllBackgroundTransparency}
+            >
+              背景透過リセット
+            </button>
 
           </div>
           )}
