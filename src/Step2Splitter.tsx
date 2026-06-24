@@ -1178,7 +1178,7 @@ export default function Step2Splitter(props: Props) {
               >
                 <span style={{ fontSize: 32 }}>📥</span>
                 <strong>シート画像をアップロード</strong>
-                <span>選んだ {gridLabel} でコマ分割します（PNG推奨）</span>
+                <span>PNG画像がおすすめ</span>
               </button>
             </section>
 
