@@ -1930,6 +1930,33 @@
   font-weight: 900;
   margin-bottom: 8px;
 }
+.v2-live-bg-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.v2-live-bg-controls span {
+  color: var(--v2-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.v2-live-bg-controls button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1.5px solid var(--v2-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.v2-live-bg-controls button.is-active {
+  border: 2px solid var(--v2-pink);
+  box-shadow: 0 0 0 2px rgba(247, 168, 200, .3);
+}
+.v2-live-bg-controls.in-modal {
+  justify-content: flex-end;
+  margin: -2px 0 10px;
+}
 .v2-batch-tool-head {
   margin-bottom: 4px;
 }

@@ -190,6 +190,7 @@ export default function Step2Splitter(props: Props) {
   const bgUndoStackRef = useRef<BgUndoSnapshot[]>([]);
   const bgEditStartSrcRef = useRef<string | null>(null);
   const bgStepResetCellsRef = useRef<SourceImage[] | null>(null);
+  const bgStepResetSheetSrcRef = useRef<string | null>(null);
   const bgColorSourceRef = useRef<string | null>(null);
   const bgBatchColorBaseRef = useRef<SourceImage[] | null>(null);
   const [drag, setDrag] = useState<{ axis: DragAxis; index: number } | null>(null);
@@ -262,17 +263,21 @@ export default function Step2Splitter(props: Props) {
   useEffect(() => {
     if (phase !== "background") {
       bgStepResetCellsRef.current = null;
+      bgStepResetSheetSrcRef.current = null;
       bgColorSourceRef.current = null;
       bgBatchColorBaseRef.current = null;
       setBgResetReady(false);
       return;
+    }
+    if (!bgStepResetSheetSrcRef.current && sheetSrc) {
+      bgStepResetSheetSrcRef.current = sheetSrc;
     }
     if (splitCells.length > 0 && bgStepResetCellsRef.current?.length !== splitCells.length) {
       bgStepResetCellsRef.current = splitCells.map((cell) => ({ ...cell }));
       bgBatchColorBaseRef.current = null;
       setBgResetReady(true);
     }
-  }, [phase, splitCells]);
+  }, [phase, sheetSrc, splitCells]);
 
   useEffect(() => {
     batchEditIndexRef.current = batchEditIndex;
@@ -387,9 +392,17 @@ export default function Step2Splitter(props: Props) {
     const next = baseline.map((cell) => ({ ...cell }));
     splitCellsRef.current = next;
     setSplitCells(next);
+    const resetSheetSrc = bgStepResetSheetSrcRef.current ?? rawSrc;
+    if (resetSheetSrc) {
+      setSheetSrc(resetSheetSrc);
+      if (batchEditIndexRef.current === null) {
+        eraseSourceRef.current = resetSheetSrc;
+      }
+    }
+    setBgTransparent(false);
     eraseQueueRef.current = [];
     const index = batchEditIndexRef.current;
-    eraseSourceRef.current = index !== null ? next[index]?.src ?? null : null;
+    eraseSourceRef.current = index !== null ? next[index]?.src ?? null : resetSheetSrc ?? null;
     bgColorSourceRef.current = null;
     bgBatchColorBaseRef.current = null;
     setPickedColor(null);
@@ -425,6 +438,7 @@ export default function Step2Splitter(props: Props) {
   async function applyUploadedSrc(url: string) {
     clearBgUndoStack();
     bgStepResetCellsRef.current = null;
+    bgStepResetSheetSrcRef.current = null;
     bgColorSourceRef.current = null;
     bgBatchColorBaseRef.current = null;
     setBgResetReady(false);
@@ -735,6 +749,7 @@ export default function Step2Splitter(props: Props) {
     setMessage("");
     clearBgUndoStack();
     bgStepResetCellsRef.current = null;
+    bgStepResetSheetSrcRef.current = null;
     bgColorSourceRef.current = null;
     bgBatchColorBaseRef.current = null;
     setBgResetReady(false);
@@ -951,6 +966,24 @@ export default function Step2Splitter(props: Props) {
   const bgEditorSrc = batchEditCell?.src ?? sheetSrc;
   const sidebarBgTool: "auto" | "color" = bgTool === "auto" ? "auto" : "color";
   const useSplitCellPreview = phase === "background" && splitCells.length > 0;
+  function renderLiveBgSwatches(extraClass = "") {
+    return (
+      <div className={`v2-live-bg-controls${extraClass ? ` ${extraClass}` : ""}`}>
+        <span>背景:</span>
+        {LIVE_BGS.map((b) => (
+          <button
+            key={b.key}
+            type="button"
+            title={`背景を${b.label}にする`}
+            aria-label={`背景を${b.label}にする`}
+            onClick={() => setLiveBg(b.key)}
+            style={{ background: b.swatch }}
+            className={liveBg === b.key ? "is-active" : ""}
+          />
+        ))}
+      </div>
+    );
+  }
   function renderBgToolTabLabel(key: BgTool, label: string) {
     return (
       <span className={`v2-bg-tool-label is-${key}`}>
@@ -1016,6 +1049,7 @@ export default function Step2Splitter(props: Props) {
           <div
             ref={adjustPreviewRef}
             className={`v2-bg-zoom-canvas${bgTool === "color" ? " is-picking" : bgTool === "eraser" ? " is-erasing" : ""}`}
+            style={{ background: liveBgCss }}
             onPointerDown={handlePreviewPointerDown}
             onPointerMove={handlePreviewPointerMove}
             onPointerUp={handlePreviewPointerUp}
@@ -1077,6 +1111,8 @@ export default function Step2Splitter(props: Props) {
                 </button>
               ))}
             </div>
+
+            {renderLiveBgSwatches("in-modal")}
 
             {bgTool === "auto" && (
               <div className="v2-bg-tool-body">
@@ -1570,6 +1606,7 @@ export default function Step2Splitter(props: Props) {
             </div>
             <div
               className={`v2-bg-edit-preview${sidebarBgTool === "color" ? " is-picking" : ""}`}
+              style={{ background: liveBgCss }}
               role="button"
               tabIndex={0}
               onClick={() => openSheetEditor()}
