@@ -1822,6 +1822,33 @@
   font-weight: 900;
   pointer-events: none;
 }
+.v2-bg-zoom-canvas-actions {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+}
+.v2-bg-zoom-canvas-actions button {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, .94);
+  color: var(--v2-ink);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 7px 18px rgba(45, 35, 64, .18);
+}
+.v2-bg-zoom-canvas-actions button:hover:not(:disabled) {
+  color: var(--v2-pink);
+  transform: translateY(-1px);
+}
+.v2-bg-zoom-canvas-actions button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
 .v2-bg-zoom-tools {
   min-width: 0;
   padding: 14px;

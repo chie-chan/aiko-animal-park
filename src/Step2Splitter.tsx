@@ -188,6 +188,7 @@ export default function Step2Splitter(props: Props) {
   const eraseQueueRef = useRef<EraseStroke[]>([]);
   const eraseBusyRef = useRef(false);
   const bgUndoStackRef = useRef<BgUndoSnapshot[]>([]);
+  const bgEditStartSrcRef = useRef<string | null>(null);
   const [drag, setDrag] = useState<{ axis: DragAxis; index: number } | null>(null);
   const [erasing, setErasing] = useState(false);
   const [zoomCell, setZoomCell] = useState<number | null>(null);
@@ -315,7 +316,7 @@ export default function Step2Splitter(props: Props) {
   }
 
   function undoBackgroundEdit() {
-    if (processing) return;
+    if (processing || eraseBusyRef.current) return;
     const stack = bgUndoStackRef.current;
     const snapshot = stack[stack.length - 1];
     if (!snapshot) return;
@@ -339,6 +340,18 @@ export default function Step2Splitter(props: Props) {
     }
 
     setMessage("1つ前に戻しました。");
+  }
+
+  function resetBackgroundEdit() {
+    if (processing || eraseBusyRef.current) return;
+    const startSrc = bgEditStartSrcRef.current;
+    const currentSrc = getActiveEditSource();
+    if (!startSrc || !currentSrc) return;
+    if (startSrc !== currentSrc) pushBgUndo(createActiveUndoSnapshot(currentSrc));
+    eraseQueueRef.current = [];
+    setActiveEditSource(startSrc);
+    setErasing(false);
+    setMessage("この編集を開いた時点に戻しました。");
   }
 
   function renderColorUndoButton() {
@@ -779,7 +792,10 @@ export default function Step2Splitter(props: Props) {
     if (bgTool === "eraser") {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
+      const source = getActiveEditSource();
+      if (!source) return;
       if (!erasing) {
+        pushBgUndo(createActiveUndoSnapshot(source));
         trackStampEvent("background_eraser", {
           target: batchEditIndexRef.current !== null ? "batch-cell" : "sheet",
           radius: eraseRadius,
@@ -854,6 +870,17 @@ export default function Step2Splitter(props: Props) {
     batchEditIndexRef.current = index;
     setBatchEditIndex(index);
     eraseSourceRef.current = cell.src;
+    bgEditStartSrcRef.current = cell.src;
+    setBgTool(tool);
+    setBgEditZoomOpen(true);
+  }
+
+  function openSheetEditor(tool: BgTool = bgTool === "auto" ? "color" : bgTool) {
+    if (!sheetSrc) return;
+    batchEditIndexRef.current = null;
+    setBatchEditIndex(null);
+    eraseSourceRef.current = sheetSrc;
+    bgEditStartSrcRef.current = sheetSrc;
     setBgTool(tool);
     setBgEditZoomOpen(true);
   }
@@ -861,6 +888,7 @@ export default function Step2Splitter(props: Props) {
   function closeBgEditor() {
     setBgEditZoomOpen(false);
     setErasing(false);
+    bgEditStartSrcRef.current = null;
     if (bgTool === "eraser") setBgTool("auto");
     if (batchEditIndexRef.current !== null) {
       batchEditIndexRef.current = null;
@@ -904,6 +932,29 @@ export default function Step2Splitter(props: Props) {
                   ? "消したい部分をドラッグ"
                   : "自動透過は右のボタンから実行"}
             </span>
+            {bgTool === "eraser" && (
+              <div
+                className="v2-bg-zoom-canvas-actions"
+                onPointerDown={(event) => event.stopPropagation()}
+                onPointerMove={(event) => event.stopPropagation()}
+                onPointerUp={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  disabled={processing || erasing || bgUndoCount === 0}
+                  onClick={undoBackgroundEdit}
+                >
+                  ↶ 戻る
+                </button>
+                <button
+                  type="button"
+                  disabled={processing || erasing || !bgEditStartSrcRef.current}
+                  onClick={resetBackgroundEdit}
+                >
+                  リセット
+                </button>
+              </div>
+            )}
           </div>
 
           <aside className="v2-bg-zoom-tools">
@@ -1406,11 +1457,11 @@ export default function Step2Splitter(props: Props) {
               className={`v2-bg-edit-preview${sidebarBgTool === "color" ? " is-picking" : ""}`}
               role="button"
               tabIndex={0}
-              onClick={() => setBgEditZoomOpen(true)}
+              onClick={() => openSheetEditor()}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  setBgEditZoomOpen(true);
+                  openSheetEditor();
                 }
               }}
               aria-label="背景透過プレビューを拡大して編集"
