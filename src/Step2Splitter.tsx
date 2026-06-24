@@ -477,7 +477,12 @@ export default function Step2Splitter(props: Props) {
         ? await makeEdgeBackgroundTransparent(source)
         : await makeImageTransparent(source);
       setActiveEditSource(out);
-      setMessage("");
+      if (!editingBatch) {
+        const committed = await commitSheetBackgroundToCells(out);
+        if (!committed) setMessage("");
+      } else {
+        setMessage("");
+      }
     } catch (err) {
       console.error(err);
       setMessage("透過に失敗しました。別の方法で試してください。");
@@ -504,7 +509,12 @@ export default function Step2Splitter(props: Props) {
         tolerance: bgTolerance,
       });
       setActiveEditSource(out);
-      setMessage("");
+      if (!editingBatch) {
+        const committed = await commitSheetBackgroundToCells(out);
+        if (!committed) setMessage("");
+      } else {
+        setMessage("");
+      }
     } catch (err) {
       console.error(err);
       setMessage("色指定の透過に失敗しました。許容値を変えてもう一度試してください。");
@@ -651,8 +661,10 @@ export default function Step2Splitter(props: Props) {
         gridRows,
         overrides,
       );
+      splitCellsRef.current = cells;
       setSplitCells(cells);
       setMessage("");
+      return true;
     } catch (err) {
       console.error(err);
       setMessage("分割に失敗しました。画像を確認してください。");
@@ -661,6 +673,20 @@ export default function Step2Splitter(props: Props) {
 
   // シート画像アップロード時／グリッドサイズ変更時に即座に分割。
   // 40枚一括取り込みでは sheetSrc を使わないため、sheetSrc=null でも splitCells は消さない。
+  async function commitSheetBackgroundToCells(source = getActiveEditSource()) {
+    if (!source || phase !== "background" || batchEditIndexRef.current !== null || splitCellsRef.current.length === 0) {
+      return false;
+    }
+    setBatchProgress("背景透過プレビューへ反映中…");
+    const ok = await regenerateCells(source);
+    setBatchProgress("");
+    if (ok) {
+      bgBatchColorBaseRef.current = null;
+      setMessage("背景透過プレビューへ反映しました。");
+    }
+    return ok;
+  }
+
   function updateCellCropOverride(index: number, patch: Partial<CellCropOverride>) {
     const current = cropOverrideFor(index);
     const normalized = normalizeCropOverride({ ...current, ...patch });
@@ -969,6 +995,7 @@ export default function Step2Splitter(props: Props) {
 
   function renderBgEditorModal(src: string) {
     const editingBatch = batchEditIndex !== null;
+    const canCommitSheetPreview = !editingBatch && useSplitCellPreview;
     return (
       <div
         className="v2-bg-zoom-overlay"
@@ -1107,6 +1134,17 @@ export default function Step2Splitter(props: Props) {
                 </label>
                 <p>大きい画像上をドラッグすると、その部分だけ透明になります。</p>
               </div>
+            )}
+
+            {canCommitSheetPreview && (
+              <button
+                type="button"
+                className="v2-bg-tool-action"
+                disabled={processing || erasing || !src}
+                onClick={() => void commitSheetBackgroundToCells(src)}
+              >
+                これで保存してプレビューへ反映
+              </button>
             )}
 
             {message && <p className="v2-toolbar-note">{message}</p>}
