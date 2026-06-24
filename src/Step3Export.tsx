@@ -33,9 +33,11 @@ const MAIN_W = 240;
 const MAIN_H = 240;
 const TAB_W = 96;
 const TAB_H = 74;
+const LINE_STICKER_COUNTS = [8, 16, 24, 32, 40] as const;
 
 type MetaTab = "main" | "tab";
 type ExportPresetId = "sticker-max" | "emoji";
+type LineStickerCount = (typeof LINE_STICKER_COUNTS)[number];
 
 interface ExportPreset {
   id: ExportPresetId;
@@ -80,6 +82,11 @@ const EXPORT_PRESETS: ExportPreset[] = [
   },
 ];
 
+function recommendedStickerCount(imageCount: number): LineStickerCount {
+  const available = LINE_STICKER_COUNTS.filter((count) => count <= imageCount);
+  return available[available.length - 1] ?? LINE_STICKER_COUNTS[0];
+}
+
 export default function Step3Export(props: Props) {
   const {
     splitCells,
@@ -99,6 +106,9 @@ export default function Step3Export(props: Props) {
 
   const [activeTab, setActiveTab] = useState<MetaTab>("main");
   const [presetId, setPresetId] = useState<ExportPresetId>("sticker-max");
+  const [exportCount, setExportCount] = useState<LineStickerCount>(() =>
+    recommendedStickerCount(splitCells.length),
+  );
   const [bodyMargin, setBodyMargin] = useState(10);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -113,8 +123,16 @@ export default function Step3Export(props: Props) {
     setBodyMargin(preset.defaultMargin);
   }, [preset.defaultMargin, preset.id]);
 
-  const mainCell = splitCells.find((c) => c.id === mainImageId) ?? splitCells[0];
-  const tabCell = splitCells.find((c) => c.id === tabImageId) ?? splitCells[0];
+  useEffect(() => {
+    setExportCount(recommendedStickerCount(splitCells.length));
+  }, [splitCells.length]);
+
+  const exportCells = splitCells.slice(0, exportCount);
+  const missingCount = Math.max(0, exportCount - splitCells.length);
+  const excludedCount = Math.max(0, splitCells.length - exportCount);
+  const canDownload = splitCells.length >= exportCount;
+  const mainCell = exportCells.find((c) => c.id === mainImageId) ?? exportCells[0] ?? splitCells[0];
+  const tabCell = exportCells.find((c) => c.id === tabImageId) ?? exportCells[0] ?? splitCells[0];
 
   function offsetFor(id: string): CellOffset {
     return { dx: 0, dy: 0, scale: 1, ...(cellOffsets[id] ?? {}) };
@@ -132,6 +150,7 @@ export default function Step3Export(props: Props) {
     trackStampEvent("export_zip", {
       preset: preset.id,
       cellCount: splitCells.length,
+      exportCount,
       width: preset.width,
       height: preset.height,
     });
@@ -140,8 +159,8 @@ export default function Step3Export(props: Props) {
 
     try {
       const zip = new JSZip();
-      for (let i = 0; i < splitCells.length; i += 1) {
-        const cell = splitCells[i];
+      for (let i = 0; i < exportCells.length; i += 1) {
+        const cell = exportCells[i];
         const blob = await renderCellToSize(cell.src, preset.width, preset.height, offsetFor(cell.id), bodyMargin);
         zip.file(`${String(i + 1).padStart(preset.fileDigits, "0")}.png`, blob);
       }
@@ -159,7 +178,7 @@ export default function Step3Export(props: Props) {
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${preset.downloadPrefix}-${preset.width}x${preset.height}-${Date.now()}.zip`;
+      a.download = `${preset.downloadPrefix}-${exportCount}枚-${preset.width}x${preset.height}-${Date.now()}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -185,7 +204,7 @@ export default function Step3Export(props: Props) {
   }
 
   const isMainTab = activeTab === "main";
-  const targetId = isMainTab ? mainImageId : tabImageId;
+  const targetId = isMainTab ? mainCell?.id : tabCell?.id;
   const targetCell = isMainTab ? mainCell : tabCell;
   const setTargetId = isMainTab ? setMainImageId : setTabImageId;
   const metaCount = (preset.includeMain ? 1 : 0) + (preset.includeTab ? 1 : 0);
@@ -221,9 +240,15 @@ export default function Step3Export(props: Props) {
           {splitCells.map((cell, index) => {
             const isMain = preset.includeMain && cell.id === mainImageId;
             const isTab = preset.includeTab && cell.id === tabImageId;
+            const isExcluded = index >= exportCount;
             return (
-              <div key={cell.id} className={`v2-reorder-cell${bgClass(bgPreview)}${isBatchLayout ? " is-batch-cell" : ""}`} style={{ cursor: "default" }}>
+              <div
+                key={cell.id}
+                className={`v2-reorder-cell${bgClass(bgPreview)}${isBatchLayout ? " is-batch-cell" : ""}${isExcluded ? " is-export-excluded" : ""}`}
+                style={{ cursor: "default" }}
+              >
                 <span className="v2-reorder-cell-num">{index + 1}</span>
+                {isExcluded && <span className="v2-reorder-cell-excluded">除外</span>}
                 {(isMain || isTab) && (
                   <span className={`v2-reorder-cell-flag ${isMain ? "main" : "tab"}`}>
                     {isMain ? "M" : "T"}
@@ -267,6 +292,30 @@ export default function Step3Export(props: Props) {
           </label>
         </div>
 
+        <div className="v2-export-count-card">
+          <span className="v2-export-preset-label">LINEセット枚数</span>
+          <div className="v2-export-count-grid" role="group" aria-label="LINEセット枚数">
+            {LINE_STICKER_COUNTS.map((count) => (
+              <button
+                key={count}
+                type="button"
+                className={exportCount === count ? "is-active" : ""}
+                disabled={splitCells.length < count}
+                onClick={() => setExportCount(count)}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          <p className={`v2-export-count-note${missingCount > 0 ? " is-warning" : ""}`}>
+            {missingCount > 0
+              ? `現在${splitCells.length}枚です。${exportCount}枚セットにはあと${missingCount}枚必要です。`
+              : excludedCount > 0
+                ? `現在${splitCells.length}枚です。先頭${exportCount}枚を書き出し、${excludedCount}枚は除外します。`
+                : `現在${splitCells.length}枚です。${exportCount}枚セットで書き出します。`}
+          </p>
+        </div>
+
         <div className="v2-meta-tab-row" role="tablist">
           {preset.includeMain && (
             <button
@@ -299,7 +348,7 @@ export default function Step3Export(props: Props) {
         </div>
 
         <div className="v2-meta-strip">
-          {splitCells.map((cell, i) => (
+          {exportCells.map((cell, i) => (
             <button
               key={cell.id}
               type="button"
@@ -317,10 +366,14 @@ export default function Step3Export(props: Props) {
           type="button"
           className="v2-btn-zip"
           onClick={downloadZip}
-          disabled={busy || splitCells.length === 0}
+          disabled={busy || !canDownload || exportCells.length === 0}
           style={{ marginTop: 16 }}
         >
-          {busy ? "ZIP作成中..." : `ZIPでダウンロード（${splitCells.length}枚${metaCount ? `＋${metaCount}枚` : ""}）`}
+          {busy
+            ? "ZIP作成中..."
+            : missingCount > 0
+              ? `あと${missingCount}枚必要`
+              : `ZIPでダウンロード（${exportCount}枚${metaCount ? `＋${metaCount}枚` : ""}）`}
         </button>
 
         {message && (
@@ -330,7 +383,7 @@ export default function Step3Export(props: Props) {
         )}
 
         <ul className="v2-export-spec-list">
-          <li>{preset.bodyLabel}：{preset.width}×{preset.height} 透過PNG ×{splitCells.length}（自動余白 {bodyMargin}px）</li>
+          <li>{preset.bodyLabel}：{preset.width}×{preset.height} 透過PNG ×{exportCount}（自動余白 {bodyMargin}px）</li>
           {presetId === "emoji" && <li>ファイル名：001.png〜（通常絵文字向け）</li>}
           {preset.includeMain && <li>main.png：240×240 透過PNG</li>}
           {preset.includeTab && <li>tab.png：96×74 透過PNG</li>}

@@ -856,6 +856,8 @@ export default function Step2Splitter(props: Props) {
   const gridLabel = `${gridCols}×${gridRows}`;
   const batchEditCell = batchEditIndex === null ? null : splitCells[batchEditIndex] ?? null;
   const bgEditorSrc = batchEditCell?.src ?? sheetSrc;
+  const sidebarBgTool: "auto" | "color" = bgTool === "auto" ? "auto" : "color";
+  const useSplitCellPreview = phase === "background" && splitCells.length > 0;
   function renderBgToolTabLabel(key: BgTool, label: string) {
     return (
       <span className={`v2-bg-tool-label is-${key}`}>
@@ -1261,8 +1263,6 @@ export default function Step2Splitter(props: Props) {
   const lastIdx = cellCount - 1;
   const showGridControls = phase !== "background";
   const showBackgroundControls = phase !== "grid";
-  const sidebarBgTool: "auto" | "color" = bgTool === "auto" ? "auto" : "color";
-  const useSplitCellPreview = phase === "background" && splitCells.length > 0;
   const zoomOverride = zoomCell === null ? null : cropOverrideFor(zoomCell);
 
   return (
