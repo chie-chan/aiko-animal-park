@@ -15,6 +15,7 @@ interface Props {
   setBgPreview: (v: BgPreview) => void;
   gridCols?: GridSize;
   gridRows?: GridSize;
+  trialMode?: boolean;
 }
 
 const BG_OPTIONS: { value: BgPreview; label: string; cls: string }[] = [
@@ -97,6 +98,7 @@ export default function Step3Export(props: Props) {
     setBgPreview,
     gridCols = 4,
     gridRows = 4,
+    trialMode = false,
   } = props;
   const isBatchLayout = splitCells.some((cell) => cell.id.startsWith("batch-")) || splitCells.length !== gridCols * gridRows;
   const gridStyle = {
@@ -147,6 +149,10 @@ export default function Step3Export(props: Props) {
 
   async function downloadZip() {
     if (!splitCells.length || busy) return;
+    if (trialMode) {
+      setMessage("お試し版ではZIP保存はできません。製品版でご利用いただけます。");
+      return;
+    }
     trackStampEvent("export_zip", {
       preset: preset.id,
       cellCount: splitCells.length,
@@ -366,15 +372,23 @@ export default function Step3Export(props: Props) {
           type="button"
           className="v2-btn-zip"
           onClick={downloadZip}
-          disabled={busy || !canDownload || exportCells.length === 0}
+          disabled={trialMode || busy || !canDownload || exportCells.length === 0}
           style={{ marginTop: 16 }}
         >
-          {busy
+          {trialMode
+            ? "製品版でZIP保存できます"
+            : busy
             ? "ZIP作成中..."
             : missingCount > 0
               ? `あと${missingCount}枚必要`
               : `ZIPでダウンロード（${exportCount}枚${metaCount ? `＋${metaCount}枚` : ""}）`}
         </button>
+
+        {trialMode && (
+          <div className="v2-trial-export-note">
+            お試し版では、分割・白背景透過・位置調整まで確認できます。ZIP保存、本番データの書き出し、カスタマイズ用プロンプト、詳しい使い方ガイドは製品版に含まれます。
+          </div>
+        )}
 
         {message && (
           <p style={{ fontSize: 12, color: message.startsWith("ダウンロード") ? "var(--v2-pink)" : "#c66", margin: "10px 0 0", textAlign: "center", fontWeight: 800 }}>

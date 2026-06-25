@@ -47,6 +47,10 @@ type StepId = 1 | 2 | 3 | 4 | 5;
 type IntakeMode = "sheet" | "batch" | null;
 type DesignRoomGuideStep = 0 | 1 | 2 | 3 | 4 | 5;
 export type BgPreview = "checker" | "white" | "black" | "pink" | "blue";
+type StampToolV2Mode = "full" | "trial";
+interface StampToolV2Props {
+  mode?: StampToolV2Mode;
+}
 type SpotlightPlacement = {
   left: number;
   top: number;
@@ -54,6 +58,8 @@ type SpotlightPlacement = {
 };
 
 const GRID_SIZES = [1, 2, 3, 4, 5] as GridSize[];
+const TRIAL_DEADLINE_LABEL = "6/27 19:30まで";
+const TRIAL_EXPIRES_AT_MS = Date.UTC(2026, 5, 27, 10, 30); // 2026-06-27 19:30 JST
 
 const DEFAULT_STAMP_TEXT_DRAFTS: Record<GridSize, string> = GRID_SIZES.reduce(
   (drafts, size) => {
@@ -72,7 +78,9 @@ function getStampTextDraftLines(draft: string, gridSize: GridSize): string[] {
   });
 }
 
-export default function StampToolV2() {
+export default function StampToolV2({ mode = "full" }: StampToolV2Props) {
+  const isTrialMode = mode === "trial";
+  const isTrialExpired = isTrialMode && Date.now() >= TRIAL_EXPIRES_AT_MS;
   const [step, setStep] = useState<StepId>(1);
   const [gridSize, setGridSize] = useState<GridSize>(4);
   const [splitGridCols, setSplitGridCols] = useState<GridSize>(4);
@@ -80,7 +88,7 @@ export default function StampToolV2() {
 
   // ── デザインルーム（モーダル） ──────────────────────
   const [showDesignRoom, setShowDesignRoom] = useState<boolean>(false);
-  const [showStartSpotlight, setShowStartSpotlight] = useState<boolean>(true);
+  const [showStartSpotlight, setShowStartSpotlight] = useState<boolean>(() => !isTrialMode);
   const [showNotice, setShowNotice] = useState<boolean>(false);
   const startSpotlightTargetRef = useRef<HTMLDivElement | null>(null);
   const [startSpotlightPlacement, setStartSpotlightPlacement] = useState<SpotlightPlacement | null>(null);
@@ -449,18 +457,25 @@ export default function StampToolV2() {
         >
           📱 スマホ版
         </a>
-        <div
-          ref={startSpotlightTargetRef}
-          className={`v2-topbar-start${showStartSpotlight ? " is-spotlight-target" : ""}`}
-        >
-          <button
-            type="button"
-            className="v2-topbar-tool-btn"
-            onClick={openDesignRoomWithGuide}
+        {isTrialMode ? (
+          <div className="v2-trial-chip" aria-label="24時間お試し版">
+            <strong>24時間お試し版</strong>
+            <span>{TRIAL_DEADLINE_LABEL}</span>
+          </div>
+        ) : (
+          <div
+            ref={startSpotlightTargetRef}
+            className={`v2-topbar-start${showStartSpotlight ? " is-spotlight-target" : ""}`}
           >
-            ✨ プロンプトを作る
-          </button>
-        </div>
+            <button
+              type="button"
+              className="v2-topbar-tool-btn"
+              onClick={openDesignRoomWithGuide}
+            >
+              ✨ プロンプトを作る
+            </button>
+          </div>
+        )}
       </header>
 
       <p className="v2-mobile-note">
@@ -564,12 +579,25 @@ export default function StampToolV2() {
             setBgPreview={setBgPreview}
             gridCols={splitGridCols}
             gridRows={splitGridRows}
+            trialMode={isTrialMode}
           />
         )}
       </main>
 
       {/* ── 動かせるマスコット（Clippy風） ── */}
       {false && !hasOpenOverlay && <FloatingMascot tipsByStep={MASCOT_TIPS} currentStep={step} />}
+
+      {isTrialExpired && (
+        <div className="v2-trial-expired-overlay">
+          <div className="v2-trial-expired-card">
+            <span>TRIAL CLOSED</span>
+            <strong>お試しリンクの利用期限が終了しました</strong>
+            <p>
+              うちのこスタンプ工房の製品版は、工房本体・カスタマイズ用プロンプト・詳しい使い方ガイド付きです。LINEでご案内している購入リンクをご確認ください。
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── 下部：アクションバー ── */}
       <footer className="v2-bottombar">
@@ -636,7 +664,7 @@ export default function StampToolV2() {
       </footer>
 
       {/* ── 初回チュートリアル：スポットライト ── */}
-      {showStartSpotlight && (
+      {!isTrialMode && showStartSpotlight && (
         <div className="v2-spotlight-overlay" onClick={() => setShowStartSpotlight(false)}>
           <div
             className="v2-spotlight-card"
@@ -732,7 +760,7 @@ export default function StampToolV2() {
       )}
 
       {/* ── デザインルーム モーダル ── */}
-      {showDesignRoom && (
+      {!isTrialMode && showDesignRoom && (
         <div
           className="v2-designroom-overlay"
           onClick={(e) => {

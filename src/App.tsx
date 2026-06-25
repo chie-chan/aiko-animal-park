@@ -10,7 +10,7 @@ import ThreadsPresentPage from "./ThreadsPresentPage";
 import StampAnalyticsAdmin from "./StampAnalyticsAdmin";
 
 const NOTE_HOME_URL = "https://note.com/aiko_animal";
-const STAMP_TOOL_PATHS = new Set(["/stamp", "/stamp-room", "/stamp-mobile"]);
+const STAMP_TOOL_PATHS = new Set(["/stamp", "/stamp-room", "/stamp-room-trial", "/stamp-mobile"]);
 
 export default function App() {
   const location = useLocation();
@@ -67,6 +67,7 @@ export default function App() {
         <Route path="/styles" element={<Navigate to="/style-zukan" replace />} />
         <Route path="/stamp" element={<Navigate to="/stamp-room" replace />} />
         <Route path="/stamp-room" element={<StampToolV2 />} />
+        <Route path="/stamp-room-trial" element={<StampToolV2 mode="trial" />} />
         <Route path="/stamp-v2" element={<Navigate to="/gallery?tab=catalog" replace />} />
         <Route path="/stamp-v2-admin" element={<StampAnalyticsAdmin />} />
         <Route path="/stamp-mobile" element={<StampToolMobile />} />
