@@ -130,6 +130,7 @@ const GALLERY_STYLE_SECTIONS: Array<{
       { id: "W-003", title: "新緑", image: "/assets/style-samples/style-watercolor-shinryoku.webp", tag: "グッズ向け", size: "square" },
       { id: "W-004", title: "ラナンキュラス", image: "/assets/style-samples/style-watercolor-ranunculus.webp", tag: "定番", size: "square" },
       { id: "W-029", title: "川辺ひまわり水彩", image: "/assets/style-samples/localized/w-029-riverside-sunflower.webp", tag: "グッズ向け", size: "square" },
+      { id: "W-030", title: "ひまわりバスケット水彩", image: "/assets/style-samples/localized/w-030-sunflower-basket-watercolor.webp", tag: "グッズ向け", size: "square" },
       { id: "W-008", title: "不思議の国のアリス", image: "/assets/style-samples/style-watercolor-alice-wonderland.webp", tag: "グッズ向け", size: "landscape" },
     ],
   },
