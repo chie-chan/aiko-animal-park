@@ -1,0 +1,83 @@
+/* スタンプ量産工房 StampFactory */
+.sf-shell {
+  --sf-bg: #f6f4ef;
+  --sf-card: #ffffff;
+  --sf-ink: #2b2b2b;
+  --sf-line: #e3ded3;
+  --sf-accent: #d8434a;
+  min-height: 100vh;
+  background: var(--sf-bg);
+  color: var(--sf-ink);
+  font-family: system-ui, "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.sf-header { max-width: 1100px; margin: 0 auto 12px; }
+.sf-header h1 { font-size: 22px; margin: 0 0 4px; }
+.sf-beta { font-size: 11px; background: var(--sf-accent); color: #fff; padding: 2px 6px; border-radius: 6px; vertical-align: middle; }
+.sf-sub { font-size: 13px; color: #6b6b6b; margin: 0 0 8px; }
+.sf-sub a { color: var(--sf-accent); }
+.sf-statusbar { display: flex; flex-wrap: wrap; gap: 6px; }
+.sf-chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #ece7dc; }
+.sf-chip b { color: var(--sf-accent); }
+
+.sf-body { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 270px 1fr; gap: 14px; }
+@media (max-width: 760px) { .sf-body { grid-template-columns: 1fr; } }
+
+.sf-board { background: var(--sf-card); border: 1px solid var(--sf-line); border-radius: 12px; padding: 10px; height: fit-content; }
+.sf-board-head { display: flex; gap: 6px; margin-bottom: 8px; }
+.sf-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sf-card { border: 1px solid var(--sf-line); border-radius: 10px; padding: 8px 10px; cursor: pointer; background: #fff; }
+.sf-card.is-active { border-color: var(--sf-accent); box-shadow: 0 0 0 2px rgba(216,67,74,.15); }
+.sf-card-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.sf-card-meta { display: flex; align-items: center; justify-content: space-between; }
+.sf-card-count { font-size: 12px; color: #888; }
+.sf-pill { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #ece7dc; }
+
+.sf-detail { background: var(--sf-card); border: 1px solid var(--sf-line); border-radius: 12px; padding: 14px; min-height: 320px; }
+.sf-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.sf-fields label { display: flex; flex-direction: column; font-size: 12px; color: #6b6b6b; gap: 4px; }
+.sf-field-wide { grid-column: 1 / -1; }
+.sf-fields input, .sf-fields textarea { font-size: 14px; color: var(--sf-ink); border: 1px solid var(--sf-line); border-radius: 8px; padding: 7px 9px; font-family: inherit; }
+
+.sf-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; border-top: 1px dashed var(--sf-line); }
+.sf-status-label { font-size: 12px; color: #6b6b6b; }
+.sf-status-btn { font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--sf-line); background: #fff; cursor: pointer; }
+.sf-status-btn.is-on { background: var(--sf-accent); color: #fff; border-color: var(--sf-accent); }
+
+.sf-factory-head { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 8px; flex-wrap: wrap; }
+.sf-factory-head h2 { font-size: 16px; margin: 0; }
+.sf-factory-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.sf-progress { font-size: 12px; color: #6b6b6b; margin: 6px 0; }
+
+.sf-slots { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sf-slot { border: 1px solid var(--sf-line); border-radius: 10px; padding: 8px 10px; background: #fff; }
+.sf-slot.is-done { background: #f1f7f1; border-color: #cfe6cf; }
+.sf-slot-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sf-slot-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.sf-slot-cat { font-size: 11px; background: #ece7dc; padding: 2px 7px; border-radius: 999px; }
+.sf-slot-usage { font-weight: 700; }
+.sf-slot-prompt { width: 100%; box-sizing: border-box; margin-top: 6px; font-size: 12px; color: #333; border: 1px solid var(--sf-line); border-radius: 8px; padding: 6px 8px; font-family: inherit; resize: vertical; }
+.sf-slot-edited { display: inline-block; margin-top: 4px; font-size: 10px; color: #b8860b; background: #fff5d6; padding: 1px 6px; border-radius: 999px; }
+
+.sf-handoff { margin-top: 16px; padding: 12px; background: #fbf7ef; border: 1px solid var(--sf-line); border-radius: 10px; }
+.sf-handoff h3 { margin: 0 0 6px; font-size: 14px; }
+.sf-handoff ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+.sf-handoff a { color: var(--sf-accent); }
+
+.sf-btn { font-size: 12px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--sf-line); background: #fff; color: var(--sf-ink); cursor: pointer; }
+.sf-btn:hover { background: #f3efe6; }
+.sf-btn-primary { background: var(--sf-accent); color: #fff; border-color: var(--sf-accent); }
+.sf-btn-primary:hover { filter: brightness(0.95); background: var(--sf-accent); }
+.sf-btn-danger { color: #b23; border-color: #e7c4c6; margin-left: auto; }
+.sf-btn-mini { padding: 4px 8px; }
+.sf-empty { color: #999; font-size: 13px; padding: 12px; }
+
+/* ステータス別のアクセント色 */
+.sf-chip-idea { background: #ece7dc; }
+.sf-chip-prompt { background: #e6eef7; }
+.sf-chip-generating { background: #fdf0d8; }
+.sf-chip-finished { background: #e6f3e8; }
+.sf-chip-exported { background: #e3f0f0; }
+.sf-chip-submitted { background: #efe6f5; }
+.sf-chip-published { background: #d8434a; color: #fff; }

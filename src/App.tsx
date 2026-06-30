@@ -9,9 +9,10 @@ import CandidateStudioPage from "./CandidateStudioPage";
 import ThreadsPresentPage from "./ThreadsPresentPage";
 import StampAnalyticsAdmin from "./StampAnalyticsAdmin";
 import StampMonitorPromptPage from "./StampMonitorPromptPage";
+import StampFactoryPage from "./StampFactoryPage";
 
 const NOTE_HOME_URL = "https://note.com/aiko_animal";
-const STAMP_TOOL_PATHS = new Set(["/stamp", "/stamp-room", "/stamp-room-trial", "/stamp-mobile", "/stamp-monitor-20260629"]);
+const STAMP_TOOL_PATHS = new Set(["/stamp", "/stamp-room", "/stamp-room-trial", "/stamp-mobile", "/stamp-monitor-20260629", "/stamp-factory"]);
 
 export default function App() {
   const location = useLocation();
@@ -73,6 +74,11 @@ export default function App() {
         <Route path="/stamp-v2-admin" element={<StampAnalyticsAdmin />} />
         <Route path="/stamp-mobile" element={<StampToolMobile />} />
         <Route path="/stamp-monitor-20260629" element={<StampMonitorPromptPage />} />
+        {/* 社内量産ツール。本番ビルドでは非公開（ローカル dev のみ到達可）。
+            公開ビルドで使う場合は StampV2PasswordGate でラップする。 */}
+        {import.meta.env.DEV && (
+          <Route path="/stamp-factory" element={<StampFactoryPage />} />
+        )}
         <Route path="*" element={<Navigate to="/gallery?tab=catalog" replace />} />
       </Routes>
 
