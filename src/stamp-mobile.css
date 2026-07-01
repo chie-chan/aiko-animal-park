@@ -430,6 +430,10 @@
   border-color: var(--vm-pink);
   box-shadow: 0 0 0 3px var(--vm-pink-soft);
   cursor: crosshair;
+  touch-action: none;
+}
+.vm-edit-preview.is-drawing {
+  box-shadow: 0 0 0 4px rgba(227, 110, 160, 0.28);
 }
 .vm-edit-preview img {
   width: 100%;

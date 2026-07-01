@@ -9,6 +9,7 @@ import {
 import "./stamp-mobile.css";
 import {
   type CellOffset,
+  type EraseStroke,
   type GridSize,
   type SourceImage,
   defaultCuts,
@@ -31,6 +32,13 @@ const MOBILE_FEATURED_IDS = [
   "cookie-cutter",
   "fruit-frame",
 ];
+
+type EraserPoint = {
+  x: number;
+  y: number;
+  imageW: number;
+  imageH: number;
+};
 
 const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
   { kind: "犬", emoji: "🐶", label: "犬" },
@@ -70,12 +78,19 @@ export default function StampToolMobile() {
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editPreviewRef = useRef<HTMLDivElement>(null);
+  const eraseBusyRef = useRef(false);
+  const eraseQueueRef = useRef<EraseStroke[]>([]);
+  const eraseSourceRef = useRef<string | null>(null);
+  const eraseTargetIndexRef = useRef<number | null>(null);
+  const lastErasePointRef = useRef<EraserPoint | null>(null);
+  const eraserPointerIdRef = useRef<number | null>(null);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
   const [eraserEnabled, setEraserEnabled] = useState(false);
   const [eraseBusy, setEraseBusy] = useState(false);
-  const [eraserRadius, setEraserRadius] = useState(18);
+  const [erasing, setErasing] = useState(false);
+  const [eraserRadius, setEraserRadius] = useState(10);
 
   useEffect(() => {
     if (showDesignRoom) setDrStep(1);
@@ -241,7 +256,7 @@ export default function StampToolMobile() {
     return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
   }
 
-  function pointFromEditPreview(event: ReactPointerEvent<HTMLDivElement>) {
+  function pointFromEditPreview(event: ReactPointerEvent<HTMLDivElement>): EraserPoint | null {
     const preview = editPreviewRef.current;
     const img = preview?.querySelector("img");
     if (!preview || !img) return null;
@@ -267,30 +282,97 @@ export default function StampToolMobile() {
     const x = (event.clientX - rect.left - offsetX) / drawW;
     const y = (event.clientY - rect.top - offsetY) / drawH;
     if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return { x, y };
+    return { x, y, imageW, imageH };
   }
 
-  async function eraseSelectedPoint(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!eraserEnabled || eraseBusy || !selectedCell) return;
-    event.preventDefault();
-    const point = pointFromEditPreview(event);
-    if (!point) return;
+  function makeEraseStrokes(point: EraserPoint) {
+    const previous = lastErasePointRef.current;
+    lastErasePointRef.current = point;
+    if (!previous) return [{ x: point.x, y: point.y, radius: eraserRadius }];
 
+    const dx = (point.x - previous.x) * point.imageW;
+    const dy = (point.y - previous.y) * point.imageH;
+    const distance = Math.hypot(dx, dy);
+    const spacing = Math.max(1, eraserRadius * 0.25);
+    const steps = Math.max(1, Math.ceil(distance / spacing));
+    const strokes: EraseStroke[] = [];
+
+    for (let i = 1; i <= steps; i += 1) {
+      const t = i / steps;
+      strokes.push({
+        x: previous.x + (point.x - previous.x) * t,
+        y: previous.y + (point.y - previous.y) * t,
+        radius: eraserRadius,
+      });
+    }
+    return strokes;
+  }
+
+  function queueErase(event: ReactPointerEvent<HTMLDivElement>) {
+    const point = pointFromEditPreview(event);
+    if (!point) {
+      lastErasePointRef.current = null;
+      return;
+    }
+    eraseQueueRef.current.push(...makeEraseStrokes(point));
+    void flushEraseQueue();
+  }
+
+  async function flushEraseQueue() {
+    if (eraseBusyRef.current) return;
+    const source = eraseSourceRef.current;
+    const strokes = eraseQueueRef.current.splice(0);
+    const targetIndex = eraseTargetIndexRef.current;
+    if (!source || !strokes.length || targetIndex === null) return;
+
+    eraseBusyRef.current = true;
     setEraseBusy(true);
     setSplitMsg("");
     try {
-      const nextSrc = await eraseImageAtPoints(selectedCell.src, [
-        { x: point.x, y: point.y, radius: eraserRadius },
-      ]);
+      const nextSrc = await eraseImageAtPoints(source, strokes);
+      eraseSourceRef.current = nextSrc;
       setSplitCells((cells) =>
-        cells.map((cell, index) => (index === selectedIndex ? { ...cell, src: nextSrc } : cell)),
+        cells.map((cell, index) => (index === targetIndex ? { ...cell, src: nextSrc } : cell)),
       );
     } catch (err) {
       console.error(err);
       setSplitMsg("消しゴム処理に失敗しました。");
     } finally {
+      eraseBusyRef.current = false;
       setEraseBusy(false);
+      if (eraseQueueRef.current.length) void flushEraseQueue();
     }
+  }
+
+  function startErase(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!eraserEnabled || !selectedCell) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    eraserPointerIdRef.current = event.pointerId;
+    eraseSourceRef.current =
+      eraseTargetIndexRef.current === selectedIndex && eraseSourceRef.current
+        ? eraseSourceRef.current
+        : selectedCell.src;
+    eraseTargetIndexRef.current = selectedIndex;
+    lastErasePointRef.current = null;
+    setErasing(true);
+    queueErase(event);
+  }
+
+  function moveErase(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!eraserEnabled || eraserPointerIdRef.current !== event.pointerId) return;
+    event.preventDefault();
+    queueErase(event);
+  }
+
+  function stopErase(event: ReactPointerEvent<HTMLDivElement>) {
+    if (eraserPointerIdRef.current !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    eraserPointerIdRef.current = null;
+    lastErasePointRef.current = null;
+    setErasing(false);
   }
 
   function changeGridSize(size: GridSize) {
@@ -470,15 +552,18 @@ export default function StampToolMobile() {
                 <div className="vm-edit-body">
                   <div
                     ref={editPreviewRef}
-                    className={`vm-edit-preview${eraserEnabled ? " is-eraser" : ""}`}
-                    onPointerDown={eraseSelectedPoint}
+                    className={`vm-edit-preview${eraserEnabled ? " is-eraser" : ""}${erasing ? " is-drawing" : ""}`}
+                    onPointerDown={startErase}
+                    onPointerMove={moveErase}
+                    onPointerUp={stopErase}
+                    onPointerCancel={stopErase}
                   >
                     <img
                       src={selectedCell.src}
                       alt={selectedCell.name}
                       style={{ transform: transformFor(selectedCell.id) }}
                     />
-                    {eraserEnabled && <span className="vm-eraser-hint">タップで消す</span>}
+                    {eraserEnabled && <span className="vm-eraser-hint">なぞって消す</span>}
                   </div>
                   <div className="vm-edit-actions">
                     <div className="vm-eraser-row">
@@ -486,24 +571,23 @@ export default function StampToolMobile() {
                         type="button"
                         className={eraserEnabled ? "is-on" : ""}
                         onClick={() => setEraserEnabled((v) => !v)}
-                        disabled={eraseBusy}
                       >
                         消しゴム
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEraserRadius((r) => Math.max(8, r - 4))}
+                        onClick={() => setEraserRadius((r) => Math.max(4, r - 2))}
                         disabled={eraseBusy}
                       >
-                        小
+                        細
                       </button>
                       <span>{eraserRadius}px</span>
                       <button
                         type="button"
-                        onClick={() => setEraserRadius((r) => Math.min(48, r + 4))}
+                        onClick={() => setEraserRadius((r) => Math.min(32, r + 2))}
                         disabled={eraseBusy}
                       >
-                        大
+                        太
                       </button>
                     </div>
                     {eraseBusy && <p className="vm-eraser-status">消しています...</p>}
