@@ -302,6 +302,42 @@
 }
 
 /* ── 分割プレビュー（3×3） ─────────────────────── */
+.vm-split-tools {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.vm-bg-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: 1px solid var(--vm-line-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+}
+.vm-bg-swatch {
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--vm-line);
+  border-radius: 999px;
+  padding: 0;
+  background: #fff;
+  cursor: pointer;
+}
+.vm-bg-swatch.checker {
+  background: repeating-conic-gradient(#e8dbe5 0deg 90deg, #fff 90deg 180deg) 0 0 / 6px 6px;
+}
+.vm-bg-swatch.white { background: #fff; }
+.vm-bg-swatch.black { background: #1a1a1a; }
+.vm-bg-swatch.pink { background: #ffd5e6; }
+.vm-bg-swatch.blue { background: #cce6f5; }
+.vm-bg-swatch.is-active {
+  border-color: var(--vm-pink);
+  box-shadow: 0 0 0 2px rgba(227, 110, 160, 0.24);
+}
+
 .vm-grid-preview {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -356,6 +392,22 @@
   justify-content: center;
   padding: 0;
   cursor: pointer;
+}
+.vm-reorder-cell.bg-white,
+.vm-edit-preview.bg-white {
+  background: #ffffff;
+}
+.vm-reorder-cell.bg-black,
+.vm-edit-preview.bg-black {
+  background: #1a1a1a;
+}
+.vm-reorder-cell.bg-pink,
+.vm-edit-preview.bg-pink {
+  background: #ffd5e6;
+}
+.vm-reorder-cell.bg-blue,
+.vm-edit-preview.bg-blue {
+  background: #cce6f5;
 }
 .vm-reorder-cell img {
   width: 100%;

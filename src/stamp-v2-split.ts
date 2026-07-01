@@ -414,8 +414,10 @@ export async function splitSheetImage(
   gridCols: GridSize = 4,
   gridRows: GridSize = 4,
   cellOverrides: Record<number, CellCropOverride> = {},
+  options: { preserveCropSize?: boolean } = {},
 ): Promise<SourceImage[]> {
   const image = await loadImage(src);
+  const preserveCropSize = options.preserveCropSize ?? false;
   const left = outerPadding;
   const right = 100 - outerPadding;
   const top = outerPadding;
@@ -432,6 +434,13 @@ export async function splitSheetImage(
   ];
   const trimX = image.width * (trimGutter / 100) * 0.5;
   const trimY = image.height * (trimGutter / 100) * 0.5;
+
+  function fitCropRange(start: number, end: number, max: number): [number, number] {
+    const requestedSize = Math.max(1, end - start);
+    const size = Math.min(requestedSize, max);
+    const safeStart = clamp(start, 0, Math.max(0, max - size));
+    return [safeStart, safeStart + size];
+  }
 
   const cells: SourceImage[] = [];
   const lastCol = gridCols - 1;
@@ -454,10 +463,22 @@ export async function splitSheetImage(
       const baseSy = rawY + (row === 0 ? 0 : trimY);
       const baseSw = rawW - (col === 0 ? trimX : trimX * 2) + (col === lastCol ? trimX : 0);
       const baseSh = rawH - (row === 0 ? trimY : trimY * 2) + (row === lastRow ? trimY : 0);
-      const sx = clamp(baseSx + shiftXPx - padXPx + zoomXPx, 0, Math.max(0, image.width - 1));
-      const sy = clamp(baseSy + shiftYPx - padYPx + zoomYPx, 0, Math.max(0, image.height - 1));
-      const ex = clamp(baseSx + baseSw + shiftXPx + padXPx - zoomXPx, sx + 1, image.width);
-      const ey = clamp(baseSy + baseSh + shiftYPx + padYPx - zoomYPx, sy + 1, image.height);
+      const rawSx = baseSx + shiftXPx - padXPx + zoomXPx;
+      const rawSy = baseSy + shiftYPx - padYPx + zoomYPx;
+      const rawEx = baseSx + baseSw + shiftXPx + padXPx - zoomXPx;
+      const rawEy = baseSy + baseSh + shiftYPx + padYPx - zoomYPx;
+      const [sx, ex] = preserveCropSize
+        ? fitCropRange(rawSx, rawEx, image.width)
+        : [
+            clamp(rawSx, 0, Math.max(0, image.width - 1)),
+            clamp(rawEx, clamp(rawSx, 0, Math.max(0, image.width - 1)) + 1, image.width),
+          ];
+      const [sy, ey] = preserveCropSize
+        ? fitCropRange(rawSy, rawEy, image.height)
+        : [
+            clamp(rawSy, 0, Math.max(0, image.height - 1)),
+            clamp(rawEy, clamp(rawSy, 0, Math.max(0, image.height - 1)) + 1, image.height),
+          ];
       const sw = ex - sx;
       const sh = ey - sy;
 

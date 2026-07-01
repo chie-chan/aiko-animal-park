@@ -35,6 +35,16 @@ const MOBILE_FEATURED_IDS = [
   "fruit-frame",
 ];
 
+type MobileBgPreview = "checker" | "white" | "black" | "pink" | "blue";
+
+const BG_OPTIONS: { value: MobileBgPreview; label: string; cls: string }[] = [
+  { value: "checker", label: "透明チェック柄", cls: "checker" },
+  { value: "white", label: "白", cls: "white" },
+  { value: "black", label: "黒", cls: "black" },
+  { value: "pink", label: "ピンク", cls: "pink" },
+  { value: "blue", label: "水色", cls: "blue" },
+];
+
 type EraserPoint = {
   x: number;
   y: number;
@@ -85,6 +95,10 @@ function normalizeCropOverride(next: CellCropOverride): CellCropOverride | null 
   return active ? normalized : null;
 }
 
+function bgClass(bg: MobileBgPreview): string {
+  return bg === "checker" ? "" : ` bg-${bg}`;
+}
+
 export default function StampToolMobile() {
   const [showDesignRoom, setShowDesignRoom] = useState(false);
   const [drStep, setDrStep] = useState<1 | 2 | 3 | 4>(1);
@@ -106,6 +120,7 @@ export default function StampToolMobile() {
   const [processingSplit, setProcessingSplit] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
+  const [splitBgPreview, setSplitBgPreview] = useState<MobileBgPreview>("checker");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editPreviewRef = useRef<HTMLDivElement>(null);
   const eraseBusyRef = useRef(false);
@@ -116,6 +131,8 @@ export default function StampToolMobile() {
   const eraserPointerIdRef = useRef<number | null>(null);
   const cropGestureRef = useRef<CropGesture | null>(null);
   const cropPointersRef = useRef<Map<number, GesturePoint>>(new Map());
+  const cellCropOverridesRef = useRef<Record<number, CellCropOverride>>({});
+  const splitJobRef = useRef(0);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
@@ -163,6 +180,11 @@ export default function StampToolMobile() {
     }
   }
 
+  function setCropOverrideState(next: Record<number, CellCropOverride>) {
+    cellCropOverridesRef.current = next;
+    setCellCropOverrides(next);
+  }
+
   async function handleFile(files: FileList | null) {
     if (!files || !files[0]) return;
     try {
@@ -172,7 +194,7 @@ export default function StampToolMobile() {
       setSplitMsg("");
       setSelectedIndex(0);
       setCellOffsets({});
-      setCellCropOverrides({});
+      setCropOverrideState({});
     } catch (err) {
       console.error(err);
       setSplitMsg("画像の読み込みに失敗しました。");
@@ -190,18 +212,23 @@ export default function StampToolMobile() {
     setTransparencyBusy(false);
   }, [rawSheetSrc]);
 
-  async function buildSplitCells(overrides: Record<number, CellCropOverride>) {
+  async function buildSplitCells(overrides: Record<number, CellCropOverride>, jobId = splitJobRef.current) {
     if (!sheetSrc) return [];
+    const isCurrentJob = () => splitJobRef.current === jobId;
     const cuts = defaultCuts(gridSize);
-    const cells = await splitSheetImage(sheetSrc, 0, 0, cuts, cuts, gridSize, gridSize, overrides);
+    const cells = await splitSheetImage(sheetSrc, 0, 0, cuts, cuts, gridSize, gridSize, overrides, {
+      preserveCropSize: true,
+    });
     let nextCells = cells.map((cell, index) => ({
       ...cell,
       id: `mobile-cell-${index}`,
       name: `stamp_${String(index + 1).padStart(2, "0")}.png`,
     }));
     if (transparentEnabled) {
-      setTransparencyBusy(true);
-      setSplitMsg("分割画像を透過しています...");
+      if (isCurrentJob()) {
+        setTransparencyBusy(true);
+        setSplitMsg("分割画像を透過しています...");
+      }
       nextCells = await Promise.all(
         nextCells.map(async (cell) => ({
           ...cell,
@@ -209,7 +236,7 @@ export default function StampToolMobile() {
         })),
       );
     }
-    setSplitMsg("分割画像を中央にそろえています...");
+    if (isCurrentJob()) setSplitMsg("分割画像を中央にそろえています...");
     nextCells = await Promise.all(
       nextCells.map(async (cell) => ({
         ...cell,
@@ -224,11 +251,13 @@ export default function StampToolMobile() {
     options: { resetSelection?: boolean; message?: string } = {},
   ) {
     if (!sheetSrc) return;
+    const jobId = ++splitJobRef.current;
     const keepIndex = Math.min(selectedIndex, Math.max(0, expectedCellCount - 1));
     setProcessingSplit(true);
     setSplitMsg(options.message ?? "");
     try {
-      const nextCells = await buildSplitCells(overrides);
+      const nextCells = await buildSplitCells(overrides, jobId);
+      if (splitJobRef.current !== jobId) return;
       setSplitCells(nextCells);
       setSelectedIndex(options.resetSelection ? 0 : Math.min(keepIndex, Math.max(0, nextCells.length - 1)));
       if (options.resetSelection) setCellOffsets({});
@@ -241,11 +270,14 @@ export default function StampToolMobile() {
       );
     } catch (err) {
       console.error(err);
+      if (splitJobRef.current !== jobId) return;
       setSplitCells([]);
       setSplitMsg("分割に失敗しました。画像を確認してください。");
     } finally {
-      setProcessingSplit(false);
-      setTransparencyBusy(false);
+      if (splitJobRef.current === jobId) {
+        setProcessingSplit(false);
+        setTransparencyBusy(false);
+      }
     }
   }
 
@@ -257,13 +289,14 @@ export default function StampToolMobile() {
     }
 
     let cancelled = false;
+    const jobId = ++splitJobRef.current;
     setProcessingSplit(true);
     setSplitMsg("");
 
     (async () => {
       try {
-        const nextCells = await buildSplitCells(cellCropOverrides);
-        if (cancelled) return;
+        const nextCells = await buildSplitCells(cellCropOverridesRef.current, jobId);
+        if (cancelled || splitJobRef.current !== jobId) return;
         setSplitCells(nextCells);
         setSelectedIndex(0);
         setCellOffsets({});
@@ -276,12 +309,12 @@ export default function StampToolMobile() {
         );
       } catch (err) {
         console.error(err);
-        if (!cancelled) {
+        if (!cancelled && splitJobRef.current === jobId) {
           setSplitCells([]);
           setSplitMsg("分割に失敗しました。画像を確認してください。");
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && splitJobRef.current === jobId) {
           setProcessingSplit(false);
           setTransparencyBusy(false);
         }
@@ -305,7 +338,7 @@ export default function StampToolMobile() {
   }
 
   function cropOverrideFor(index: number): CellCropOverride {
-    return { shiftX: 0, shiftY: 0, padX: 0, padY: 0, zoom: 0, ...(cellCropOverrides[index] ?? {}) };
+    return { shiftX: 0, shiftY: 0, padX: 0, padY: 0, zoom: 0, ...(cellCropOverridesRef.current[index] ?? {}) };
   }
 
   function hasCropOverride(index: number) {
@@ -314,10 +347,10 @@ export default function StampToolMobile() {
 
   function applyCropOverride(index: number, override: CellCropOverride) {
     const normalized = normalizeCropOverride(override);
-    const next = { ...cellCropOverrides };
+    const next = { ...cellCropOverridesRef.current };
     if (normalized) next[index] = normalized;
     else delete next[index];
-    setCellCropOverrides(next);
+    setCropOverrideState(next);
     void regenerateSplitCells(next, { message: "切り出し範囲を調整しています..." });
   }
 
@@ -345,9 +378,9 @@ export default function StampToolMobile() {
   function resetOffset() {
     if (!selectedCell) return;
     setCellOffsets({ ...cellOffsets, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } });
-    const next = { ...cellCropOverrides };
+    const next = { ...cellCropOverridesRef.current };
     delete next[selectedIndex];
-    setCellCropOverrides(next);
+    setCropOverrideState(next);
     void regenerateSplitCells(next, { message: "個別補正をリセットしています..." });
   }
 
@@ -613,7 +646,7 @@ export default function StampToolMobile() {
   function changeGridSize(size: GridSize) {
     setGridSize(size);
     setSelectedIndex(0);
-    setCellCropOverrides({});
+    setCropOverrideState({});
     setCellOffsets({});
   }
 
@@ -742,7 +775,21 @@ export default function StampToolMobile() {
                     {splitCells.length}個にカット済み。修正したいコマをタップしてください。
                   </p>
                 </div>
-                <span className="vm-split-count">{splitCells.length}個</span>
+                <div className="vm-split-tools">
+                  <div className="vm-bg-picker" role="group" aria-label="背景色プレビュー">
+                    {BG_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={`vm-bg-swatch ${opt.cls}${splitBgPreview === opt.value ? " is-active" : ""}`}
+                        onClick={() => setSplitBgPreview(opt.value)}
+                        aria-label={opt.label}
+                        title={opt.label}
+                      />
+                    ))}
+                  </div>
+                  <span className="vm-split-count">{splitCells.length}個</span>
+                </div>
               </div>
 
               <div
@@ -755,8 +802,11 @@ export default function StampToolMobile() {
                     <button
                       key={cell.id}
                       type="button"
-                      className={`vm-reorder-cell${isSelected ? " is-selected" : ""}${hasCropOverride(index) ? " is-crop-adjusted" : ""}`}
-                      onClick={() => setSelectedIndex(index)}
+                      className={`vm-reorder-cell${bgClass(splitBgPreview)}${isSelected ? " is-selected" : ""}${hasCropOverride(index) ? " is-crop-adjusted" : ""}`}
+                      onClick={() => {
+                        clearCropGesture();
+                        setSelectedIndex(index);
+                      }}
                       aria-label={`${index + 1}番を選択`}
                     >
                       <span className="vm-reorder-cell-num">{index + 1}</span>
@@ -790,7 +840,7 @@ export default function StampToolMobile() {
                 <div className="vm-edit-body">
                   <div
                     ref={editPreviewRef}
-                    className={`vm-edit-preview${eraserEnabled ? " is-eraser" : " is-crop-touch"}${erasing ? " is-drawing" : ""}${cropGesturing ? " is-crop-gesture" : ""}`}
+                    className={`vm-edit-preview${bgClass(splitBgPreview)}${eraserEnabled ? " is-eraser" : " is-crop-touch"}${erasing ? " is-drawing" : ""}${cropGesturing ? " is-crop-gesture" : ""}`}
                     onPointerDown={handleEditPointerDown}
                     onPointerMove={handleEditPointerMove}
                     onPointerUp={handleEditPointerUp}
