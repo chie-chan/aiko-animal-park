@@ -13,6 +13,7 @@ import {
   type EraseStroke,
   type GridSize,
   type SourceImage,
+  centerImageContent,
   defaultCuts,
   eraseImageAtPoints,
   makeImageTransparent,
@@ -186,6 +187,13 @@ export default function StampToolMobile() {
         })),
       );
     }
+    setSplitMsg("分割画像を中央にそろえています...");
+    nextCells = await Promise.all(
+      nextCells.map(async (cell) => ({
+        ...cell,
+        src: await centerImageContent(cell.src),
+      })),
+    );
     return nextCells;
   }
 
