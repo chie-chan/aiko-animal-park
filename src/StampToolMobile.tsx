@@ -875,9 +875,6 @@ export default function StampToolMobile() {
               <section className="vm-card vm-edit-panel">
                 <div className="vm-edit-head">
                   <h3 className="vm-card-title">{selectedIndex + 1}番を部分修正</h3>
-                  <button type="button" className="vm-topbar-btn" onClick={resetOffset}>
-                    リセット
-                  </button>
                 </div>
                 <div className="vm-edit-body">
                   <div
@@ -899,59 +896,85 @@ export default function StampToolMobile() {
                     {eraserEnabled && <span className="vm-eraser-hint">なぞって消す</span>}
                   </div>
                   <div className="vm-edit-actions">
-                    <div className="vm-eraser-row">
-                      <button
-                        type="button"
-                        className={eraserEnabled ? "is-on" : ""}
-                        onClick={toggleEraser}
-                      >
-                        消しゴム
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEraserRadius((r) => Math.max(4, r - 2))}
-                        disabled={eraseBusy}
-                      >
-                        細
-                      </button>
-                      <span>{eraserRadius}px</span>
-                      <button
-                        type="button"
-                        onClick={() => setEraserRadius((r) => Math.min(32, r + 2))}
-                        disabled={eraseBusy}
-                      >
-                        太
-                      </button>
+                    <div className="vm-tool-section">
+                      <div className="vm-tool-title">
+                        <span>消す</span>
+                      </div>
+                      <div className="vm-eraser-row">
+                        <button
+                          type="button"
+                          className={eraserEnabled ? "is-on" : ""}
+                          onClick={toggleEraser}
+                        >
+                          消しゴム
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEraserRadius((r) => Math.max(4, r - 2))}
+                          disabled={eraseBusy}
+                        >
+                          細
+                        </button>
+                        <span>{eraserRadius}px</span>
+                        <button
+                          type="button"
+                          onClick={() => setEraserRadius((r) => Math.min(32, r + 2))}
+                          disabled={eraseBusy}
+                        >
+                          太
+                        </button>
+                      </div>
+                      {eraserEnabled && (
+                        <p className={`vm-eraser-status${eraseBusy ? " is-visible" : ""}`}>
+                          {eraseBusy ? "消しています..." : "\u00a0"}
+                        </p>
+                      )}
                     </div>
-                    {eraserEnabled && (
-                      <p className={`vm-eraser-status${eraseBusy ? " is-visible" : ""}`}>
-                        {eraseBusy ? "消しています..." : "\u00a0"}
-                      </p>
-                    )}
-                    <div className="vm-center-row">
-                      <button
-                        type="button"
-                        onClick={centerSelectedContent}
-                        disabled={centerBusy || eraseBusy || processingSplit}
-                      >
-                        {centerBusy ? "中央にそろえています..." : "中央にそろえる"}
-                      </button>
+
+                    <div className="vm-tool-section">
+                      <div className="vm-tool-title">
+                        <span>整える</span>
+                      </div>
+                      <div className="vm-center-row">
+                        <button
+                          type="button"
+                          onClick={centerSelectedContent}
+                          disabled={centerBusy || eraseBusy || processingSplit}
+                        >
+                          {centerBusy ? "整え中..." : "中央にそろえる"}
+                        </button>
+                        <button type="button" className="vm-reset-button" onClick={resetOffset}>
+                          リセット
+                        </button>
+                      </div>
                     </div>
-                    <div className="vm-edit-pad" aria-label="位置調整">
-                      <span className="vm-edit-empty" />
-                      <button type="button" aria-label="切り出し範囲を上へ" onClick={() => nudgeCrop(0, -1)}>↑</button>
-                      <span className="vm-edit-empty" />
-                      <button type="button" aria-label="切り出し範囲を左へ" onClick={() => nudgeCrop(-1, 0)}>←</button>
-                      <button type="button" className="center" aria-label="中央に戻す" onClick={resetOffset}>0</button>
-                      <button type="button" aria-label="切り出し範囲を右へ" onClick={() => nudgeCrop(1, 0)}>→</button>
-                      <span className="vm-edit-empty" />
-                      <button type="button" aria-label="切り出し範囲を下へ" onClick={() => nudgeCrop(0, 1)}>↓</button>
-                      <span className="vm-edit-empty" />
+
+                    <div className="vm-tool-section">
+                      <div className="vm-tool-title">
+                        <span>移動</span>
+                      </div>
+                      <div className="vm-edit-pad" aria-label="位置調整">
+                        <span className="vm-edit-empty" />
+                        <button type="button" aria-label="切り出し範囲を上へ" onClick={() => nudgeCrop(0, -1)}>↑</button>
+                        <span className="vm-edit-empty" />
+                        <button type="button" aria-label="切り出し範囲を左へ" onClick={() => nudgeCrop(-1, 0)}>←</button>
+                        <button type="button" className="center" aria-label="中央に戻す" onClick={resetOffset}>0</button>
+                        <button type="button" aria-label="切り出し範囲を右へ" onClick={() => nudgeCrop(1, 0)}>→</button>
+                        <span className="vm-edit-empty" />
+                        <button type="button" aria-label="切り出し範囲を下へ" onClick={() => nudgeCrop(0, 1)}>↓</button>
+                        <span className="vm-edit-empty" />
+                      </div>
                     </div>
-                    <div className="vm-zoom-row">
-                      <button type="button" onClick={() => expandCrop(-0.5)}>狭く</button>
-                      <span>範囲 +{Math.max(cropOverrideFor(selectedIndex).padX ?? 0, cropOverrideFor(selectedIndex).padY ?? 0).toFixed(1)}%</span>
-                      <button type="button" onClick={() => expandCrop(0.5)}>広げる</button>
+
+                    <div className="vm-tool-section">
+                      <div className="vm-tool-title">
+                        <span>大きさ</span>
+                      </div>
+                      <div className="vm-zoom-row">
+                        <button type="button" onClick={() => expandCrop(0.5)}>小さく</button>
+                        <span>{Math.max(cropOverrideFor(selectedIndex).padX ?? 0, cropOverrideFor(selectedIndex).padY ?? 0).toFixed(1)}%</span>
+                        <button type="button" onClick={() => expandCrop(-0.5)}>大きく</button>
+                      </div>
                     </div>
                   </div>
                 </div>
