@@ -6,17 +6,15 @@ import {
 } from "./stamp-v2-split";
 
 // ======================================================================
-// Step3MobileSave ―  モバイル向け 1枚ずつカメラロール保存UI
+// Step3MobileSave ―  モバイル向けカメラロール保存UI
 //
 // 戦略:
 //   1) Web Share API（navigator.share with files）→ iOS共有シートで一括保存
 //   2) 個別ダウンロード（<a download>）→ Android はカメラロール直行
 //   3) 長押し保存（画像を大きく表示）→ Web Share 非対応端末の最終フォールバック
 //
-// LINE スタンプメーカー（iOS公式アプリ）の仕様:
-//   - メイン画像・タブ画像はアプリが自動で生成・リサイズしてくれる
-//   - 必要なのはスタンプ本体（320×320）8枚だけ
-// → 保存するのは8枚のみ。main.png / tab.png は出力しない。
+// 分割済みセルを320×320 PNGへ整えて保存する。
+// 3×3なら9枚、4×4なら16枚など、渡された枚数をそのまま出力する。
 // ======================================================================
 
 const STAMP_W = 320;
@@ -35,7 +33,12 @@ interface PreparedFile {
 }
 
 function offsetFor(cellOffsets: Record<string, CellOffset>, id: string): CellOffset {
-  return cellOffsets[id] ?? { dx: 0, dy: 0 };
+  const offset = cellOffsets[id];
+  return {
+    dx: offset?.dx ?? 0,
+    dy: offset?.dy ?? 0,
+    scale: offset?.scale ?? 1,
+  };
 }
 
 function detectShareSupport(): boolean {
@@ -124,7 +127,7 @@ export default function Step3MobileSave(props: Props) {
       await navigator.share({
         files,
         title: "うちのこスタンプ",
-        text: `LINEスタンプ用の${prepared.length}枚です（メイン・タブはアプリ側で自動生成）`,
+        text: `分割済み画像${prepared.length}枚です。`,
       });
       setMessage("共有シートから「画像を保存」を選ぶとカメラロールに入ります。");
     } catch (err: any) {
@@ -161,8 +164,8 @@ export default function Step3MobileSave(props: Props) {
   if (!splitCells.length) {
     return (
       <div className="vm-placeholder">
-        <h3>📥 まだ画像がありません</h3>
-        <p>Step 1 で3×3画像を取り込み、Step 2 で使う8枚を選んでから戻ってきてください。</p>
+        <h3>まだ画像がありません</h3>
+        <p>画像を取り込むと保存できます。</p>
       </div>
     );
   }
@@ -172,11 +175,11 @@ export default function Step3MobileSave(props: Props) {
       {/* ── 一括保存（メインCTA） ───────────────── */}
       <section className="vm-save-hero">
         <h3 className="vm-save-hero-title">
-          📲 まとめてカメラロールに保存
+          カメラロールに保存
         </h3>
         <p className="vm-save-hero-sub">
           {canShareFiles
-            ? "ボタンを押すと、共有シートから1タップで全部カメラロールへ"
+            ? `${splitCells.length}枚を共有シートからまとめて保存できます`
             : "お使いのブラウザは一括保存に未対応。下から1枚ずつ保存できます"}
         </p>
         <button
@@ -188,14 +191,11 @@ export default function Step3MobileSave(props: Props) {
           {busy
             ? "画像を準備中..."
             : canShareFiles
-              ? `📲 ${allFiles.length}枚をまとめて保存`
+              ? `${allFiles.length}枚をまとめて保存`
               : "一括保存は未対応の端末"}
         </button>
         <p className="vm-save-hero-flow">
-          ボタン → 共有シート出る → <strong>「画像を保存」</strong> をタップ → ぜんぶ写真に入る
-        </p>
-        <p className="vm-save-hero-tip">
-          💡 <strong>メイン画像・タブ画像は LINEスタンプメーカー（公式アプリ）でまとめて選んで仕上げる</strong>ので、ここで保存するのは8枚だけでOKです。
+          共有シートで <strong>画像を保存</strong> を選ぶと写真に入ります。
         </p>
       </section>
 
@@ -203,7 +203,7 @@ export default function Step3MobileSave(props: Props) {
       <section className="vm-save-list-section">
         <h4 className="vm-save-list-title">1枚ずつ保存・確認</h4>
         <p className="vm-save-list-help">
-          タップで拡大プレビュー、保存ボタンで個別カメラロール保存。
+          タップで拡大プレビュー、保存ボタンで個別保存。
         </p>
         <div className="vm-save-list">
           {prepared.map((p, i) => (
@@ -222,7 +222,7 @@ export default function Step3MobileSave(props: Props) {
                 className="vm-save-card-btn"
                 onClick={() => shareOne(p)}
               >
-                ⬇ {p.fileName}
+                {p.fileName}
               </button>
             </div>
           ))}
@@ -254,14 +254,14 @@ export default function Step3MobileSave(props: Props) {
               className="vm-preview-img"
             />
             <p className="vm-preview-hint">
-              長押し → <strong>「写真に追加」</strong>でもカメラロールに保存できます
+              長押しから保存できる端末もあります。
             </p>
             <button
               type="button"
               className="vm-preview-btn"
               onClick={() => shareOne(prepared[previewIndex])}
             >
-              ⬇ この1枚を保存
+              この1枚を保存
             </button>
             <div className="vm-preview-nav">
               <button

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./stamp-mobile.css";
 import {
   type CellOffset,
+  type GridSize,
   type SourceImage,
   defaultCuts,
   readFileAsDataUrl,
@@ -10,29 +11,18 @@ import {
 import { FRAME_DESIGNS, type FrameDesign, type PetKind, type PetKindOrNone } from "./stamp-v2-frames";
 import Step3MobileSave from "./Step3MobileSave";
 
-// ======================================================================
-// StampToolMobile  ―  スマホ専用、3×3固定の縦1カラムフロー
-//
-// Step 1: 透過済み 3×3 PNG をアップロード → 自動分割（9コマ）
-// Step 2: 並び替え（タップでスワップ）＋選択中セルの位置微調整
-// Step 3: 1枚ずつカメラロール保存（Web Share API + fallback）
-//
-// プロンプト生成は「✨ プロンプトを作る」シートから簡易デザインルーム。
-// ======================================================================
-
-const GRID = 3;
-const CELL_COUNT = GRID * GRID;
-type StepId = 1 | 2 | 3;
-
-// モバイル版に出すおすすめフレーム（サムネは商品サムネに差し替え済み）
-const MOBILE_FEATURED_IDS = [
-  "simple",         // シンプル
-  "sticker-solid",  // シール風
-  "cookie-cutter",  // クッキー枠
-  "fruit-frame",    // 果物
+const GRID_OPTIONS: { size: GridSize; label: string; count: number }[] = [
+  { size: 3, label: "3×3", count: 9 },
+  { size: 4, label: "4×4", count: 16 },
 ];
 
-// ペット種類とアイコン
+const MOBILE_FEATURED_IDS = [
+  "simple",
+  "sticker-solid",
+  "cookie-cutter",
+  "fruit-frame",
+];
+
 const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
   { kind: "犬", emoji: "🐶", label: "犬" },
   { kind: "猫", emoji: "🐱", label: "猫" },
@@ -41,37 +31,42 @@ const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
   { kind: "その他", emoji: "✨", label: "その他" },
 ];
 
-export default function StampToolMobile() {
-  const [step, setStep] = useState<StepId>(1);
+function clampOffset(v: number) {
+  return Math.max(-50, Math.min(50, v));
+}
 
-  // デザインルーム
+function clampScale(v: number) {
+  return Math.max(0.65, Math.min(1.8, v));
+}
+
+export default function StampToolMobile() {
   const [showDesignRoom, setShowDesignRoom] = useState(false);
   const [drStep, setDrStep] = useState<1 | 2 | 3 | 4>(1);
-
-  // シートを開くたびに最初のステップへ戻す
-  useEffect(() => {
-    if (showDesignRoom) setDrStep(1);
-  }, [showDesignRoom]);
   const [showNotice, setShowNotice] = useState(false);
+
   const [selectedFrameId, setSelectedFrameId] = useState<string>(MOBILE_FEATURED_IDS[0]);
   const [petKind, setPetKind] = useState<PetKindOrNone>(null);
   const [petKindOther, setPetKindOther] = useState("");
   const [features, setFeatures] = useState("");
   const [copied, setCopied] = useState(false);
 
-  // Step 1
+  const [gridSize, setGridSize] = useState<GridSize>(3);
   const [sheetSrc, setSheetSrc] = useState<string | null>(null);
   const [splitCells, setSplitCells] = useState<SourceImage[]>([]);
   const [splitMsg, setSplitMsg] = useState("");
+  const [processingSplit, setProcessingSplit] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Step 2
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
-  const [swapFromIndex, setSwapFromIndex] = useState<number | null>(null);
-  // 9マスのうち「使わない1マス」のID。LINEスタンプは8枚で1セットなので必ず1マス除外する。
-  const [excludedCellId, setExcludedCellId] = useState<string>("");
-  // ※メイン画像は LINEスタンプメーカー（公式アプリ）内で8枚から選ぶため、ここでは扱わない。
+
+  useEffect(() => {
+    if (showDesignRoom) setDrStep(1);
+  }, [showDesignRoom]);
+
+  const expectedCellCount = gridSize * gridSize;
+  const gridLabel = `${gridSize}×${gridSize}`;
+  const selectedCell = splitCells[selectedIndex] ?? null;
 
   const mobileFrames = useMemo<FrameDesign[]>(
     () => FRAME_DESIGNS.filter((f) => MOBILE_FEATURED_IDS.includes(f.id)),
@@ -79,8 +74,8 @@ export default function StampToolMobile() {
   );
   const selectedFrame = mobileFrames.find((f) => f.id === selectedFrameId) ?? mobileFrames[0];
   const generatedPrompt = useMemo(
-    () => selectedFrame.buildPrompt({ petKind, petKindOther, features }, GRID),
-    [selectedFrame, petKind, petKindOther, features],
+    () => selectedFrame.buildPrompt({ petKind, petKindOther, features }, gridSize),
+    [selectedFrame, petKind, petKindOther, features, gridSize],
   );
   const canCopy =
     petKind !== null && (petKind !== "その他" || petKindOther.trim().length > 0);
@@ -91,7 +86,6 @@ export default function StampToolMobile() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2200);
     } catch {
-      // fallback
       const ta = document.createElement("textarea");
       ta.value = generatedPrompt;
       document.body.appendChild(ta);
@@ -109,104 +103,103 @@ export default function StampToolMobile() {
       const url = await readFileAsDataUrl(files[0]);
       setSheetSrc(url);
       setSplitMsg("");
+      setSelectedIndex(0);
+      setCellOffsets({});
     } catch (err) {
       console.error(err);
       setSplitMsg("画像の読み込みに失敗しました。");
     }
   }
 
-  // 画像が来たら自動で3×3分割
   useEffect(() => {
     if (!sheetSrc) {
       setSplitCells([]);
+      setProcessingSplit(false);
       return;
     }
+
     let cancelled = false;
+    setProcessingSplit(true);
+    setSplitMsg("");
+
     (async () => {
       try {
-        const cuts = defaultCuts(GRID);
-        const cells = await splitSheetImage(sheetSrc, 0, 0, cuts, cuts, GRID, GRID);
+        const cuts = defaultCuts(gridSize);
+        const cells = await splitSheetImage(sheetSrc, 0, 0, cuts, cuts, gridSize, gridSize);
         if (cancelled) return;
         setSplitCells(cells);
-        setSplitMsg("");
         setSelectedIndex(0);
         setCellOffsets({});
-        // デフォルトで末尾（9番）のセルを「使わない」にしておく → 上位8枚で確定
-        setExcludedCellId(cells.length === CELL_COUNT ? cells[cells.length - 1].id : "");
+        setSplitMsg(`${cells.length}個に分割しました。`);
       } catch (err) {
         console.error(err);
-        if (!cancelled) setSplitMsg("分割に失敗しました。画像を確認してください。");
+        if (!cancelled) {
+          setSplitCells([]);
+          setSplitMsg("分割に失敗しました。画像を確認してください。");
+        }
+      } finally {
+        if (!cancelled) setProcessingSplit(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [sheetSrc]);
+  }, [sheetSrc, gridSize]);
 
   function offsetFor(id: string): CellOffset {
-    return cellOffsets[id] ?? { dx: 0, dy: 0 };
+    const offset = cellOffsets[id];
+    return {
+      dx: offset?.dx ?? 0,
+      dy: offset?.dy ?? 0,
+      scale: offset?.scale ?? 1,
+    };
   }
-  function nudge(dx: number, dy: number) {
-    const cell = splitCells[selectedIndex];
-    if (!cell) return;
-    const cur = offsetFor(cell.id);
+
+  function setSelectedOffset(patch: Partial<CellOffset>) {
+    if (!selectedCell) return;
+    const current = offsetFor(selectedCell.id);
     setCellOffsets({
       ...cellOffsets,
-      [cell.id]: {
-        dx: Math.max(-50, Math.min(50, cur.dx + dx)),
-        dy: Math.max(-50, Math.min(50, cur.dy + dy)),
+      [selectedCell.id]: {
+        dx: clampOffset(patch.dx ?? current.dx),
+        dy: clampOffset(patch.dy ?? current.dy),
+        scale: clampScale(patch.scale ?? current.scale ?? 1),
       },
     });
   }
-  function resetOffset() {
-    const cell = splitCells[selectedIndex];
-    if (!cell) return;
-    setCellOffsets({ ...cellOffsets, [cell.id]: { dx: 0, dy: 0 } });
+
+  function nudge(dx: number, dy: number) {
+    if (!selectedCell) return;
+    const current = offsetFor(selectedCell.id);
+    setSelectedOffset({ dx: current.dx + dx, dy: current.dy + dy });
   }
+
+  function nudgeScale(delta: number) {
+    if (!selectedCell) return;
+    const current = offsetFor(selectedCell.id);
+    setSelectedOffset({ scale: (current.scale ?? 1) + delta });
+  }
+
+  function resetOffset() {
+    if (!selectedCell) return;
+    setCellOffsets({ ...cellOffsets, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } });
+  }
+
   function transformFor(id: string) {
     const o = offsetFor(id);
-    if (!o.dx && !o.dy) return undefined;
-    return `translate(${o.dx}%, ${o.dy}%)`;
+    const scale = o.scale ?? 1;
+    if (!o.dx && !o.dy && scale === 1) return undefined;
+    return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
   }
 
-  // タップ2回でスワップ
-  function handleCellTap(index: number) {
-    if (swapFromIndex === null) {
-      setSelectedIndex(index);
-      setSwapFromIndex(index);
-      return;
-    }
-    if (swapFromIndex === index) {
-      setSwapFromIndex(null);
-      return;
-    }
-    const next = [...splitCells];
-    [next[swapFromIndex], next[index]] = [next[index], next[swapFromIndex]];
-    setSplitCells(next);
-    setSelectedIndex(index);
-    setSwapFromIndex(null);
+  function changeGridSize(size: GridSize) {
+    setGridSize(size);
+    setSelectedIndex(0);
   }
-
-  // 「使わない」マークを別のセルに付け替える
-  function toggleExcluded(cellId: string) {
-    setExcludedCellId((cur) => (cur === cellId ? "" : cellId));
-  }
-
-  // 保存対象＝除外されてない8枚
-  const includedCells = useMemo(
-    () => splitCells.filter((c) => c.id !== excludedCellId),
-    [splitCells, excludedCellId],
-  );
-
-  const canGoNext =
-    step === 3 ? false :
-    step === 1 ? splitCells.length === CELL_COUNT :
-    step === 2 ? includedCells.length === 8 :
-    false;
 
   return (
     <div className="vm-shell">
-      {/* ── ヘッダー ─────────────────── */}
       <header className="vm-topbar">
         <div className="vm-topbar-row">
           <div className="vm-topbar-title">
@@ -214,12 +207,8 @@ export default function StampToolMobile() {
             <span className="vm-topbar-name">うちのこスタンプ工房（スマホ版）</span>
           </div>
           <div className="vm-topbar-actions">
-            <a
-              className="vm-topbar-btn"
-              href="/stamp-v2"
-              title="PC版（4×4対応・タブ画像も指定可）を開く"
-            >
-              💻 PC版
+            <a className="vm-topbar-btn" href="/stamp-room" title="PC版を開く">
+              PC版
             </a>
             <button
               type="button"
@@ -227,234 +216,153 @@ export default function StampToolMobile() {
               onClick={() => setShowNotice(true)}
               aria-label="注意事項"
             >
-              ℹ️
+              i
             </button>
             <button
               type="button"
               className="vm-topbar-btn is-primary"
               onClick={() => setShowDesignRoom(true)}
             >
-              ✨ プロンプト
+              プロンプト
             </button>
           </div>
         </div>
-        <nav className="vm-stepnav" aria-label="ステップ">
-          <button
-            type="button"
-            className={`vm-stepnav-item${step === 1 ? " is-active" : step > 1 ? " is-done" : ""}`}
-            onClick={() => setStep(1)}
-          >
-            <span className="vm-stepnum">1</span>
-            画像
-          </button>
-          <button
-            type="button"
-            className={`vm-stepnav-item${step === 2 ? " is-active" : step > 2 ? " is-done" : ""}`}
-            onClick={() => setStep(2)}
-            disabled={splitCells.length === 0}
-          >
-            <span className="vm-stepnum">2</span>
-            調整
-          </button>
-          <button
-            type="button"
-            className={`vm-stepnav-item${step === 3 ? " is-active" : ""}`}
-            onClick={() => setStep(3)}
-            disabled={splitCells.length === 0}
-          >
-            <span className="vm-stepnum">3</span>
-            保存
-          </button>
-        </nav>
       </header>
 
-      {/* ── メイン ─────────────────── */}
       <main className="vm-main">
-        {step === 1 && (
-          <section className="vm-card">
-            <h3 className="vm-card-title">3×3画像をアップロード</h3>
-            <p className="vm-card-sub">
-              先にChatGPTで <strong>3×3=9コマ</strong>のスタンプ画像を作って、ここにアップ。<br />
-              透過は <strong>LINEスタンプメーカー（公式アプリ）</strong> の切り抜き機能で綺麗にできるので、そのままの画像でもOK。
-              プロンプトは上の「✨ プロンプト」ボタンから作れます。
-            </p>
-
-            {!sheetSrc ? (
-              <>
+        <section className="vm-card vm-upload-panel">
+          <div className="vm-card-head">
+            <div>
+              <h3 className="vm-card-title">画像を入れる</h3>
+              <p className="vm-card-sub">{gridLabel}の画像を選ぶと、下に分割画像が出ます。</p>
+            </div>
+            <div className="vm-size-toggle" role="group" aria-label="分割数">
+              {GRID_OPTIONS.map((option) => (
                 <button
+                  key={option.size}
                   type="button"
-                  className="vm-drop-zone"
-                  onClick={() => fileInputRef.current?.click()}
+                  className={gridSize === option.size ? "is-on" : ""}
+                  onClick={() => changeGridSize(option.size)}
                 >
-                  <span style={{ fontSize: 32 }}>📥</span>
-                  <strong>3×3画像を選ぶ</strong>
-                  <span className="hint">PNGをそのままでOK</span>
+                  <strong>{option.label}</strong>
+                  <span>{option.count}個</span>
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={(e) => handleFile(e.target.files)}
-                />
-              </>
-            ) : (
-              <>
-                <div className="vm-grid-preview">
-                  {splitCells.map((c, i) => (
-                    <div key={c.id} className="vm-grid-cell">
-                      <span className="vm-grid-cell-num">{i + 1}</span>
-                      <img
-                        src={c.src}
-                        alt=""
-                        style={{ position: "static", width: "100%", height: "100%", objectFit: "contain" }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  <button
-                    type="button"
-                    className="vm-topbar-btn"
-                    style={{ flex: 1 }}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    ⇄ 別の画像にする
-                  </button>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={(e) => handleFile(e.target.files)}
-                />
-              </>
-            )}
+              ))}
+            </div>
+          </div>
 
-            {splitMsg && (
-              <p style={{ fontSize: 12, color: "#c66", marginTop: 8, textAlign: "center" }}>
-                {splitMsg}
-              </p>
-            )}
-          </section>
-        )}
+          <button
+            type="button"
+            className="vm-drop-zone"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <strong>{sheetSrc ? "画像を差し替える" : "画像を選ぶ"}</strong>
+            <span className="hint">PNG/JPG/WebP</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => handleFile(e.target.files)}
+          />
 
-        {step === 2 && splitCells.length === 0 && (
+          {sheetSrc && (
+            <div className="vm-source-preview">
+              <img src={sheetSrc} alt="取り込んだ画像" />
+            </div>
+          )}
+
+          {(processingSplit || splitMsg) && (
+            <p className={`vm-inline-msg${splitMsg.includes("失敗") ? " is-error" : ""}`}>
+              {processingSplit ? "分割中..." : splitMsg}
+            </p>
+          )}
+        </section>
+
+        {splitCells.length === 0 && !processingSplit && (
           <div className="vm-placeholder">
-            <h3>📥 まだ画像がありません</h3>
-            <p>Step 1 で3×3画像を取り込んでください。</p>
+            <h3>まだ画像がありません</h3>
+            <p>上のボタンから画像を選んでください。</p>
           </div>
         )}
 
-        {step === 2 && splitCells.length > 0 && (
+        {splitCells.length > 0 && (
           <>
             <section className="vm-card">
-              <h3 className="vm-card-title">使う8枚を選ぶ＋並び替え</h3>
-              <p className="vm-card-sub">
-                LINEスタンプは8枚で1セット。9マスのうち <strong>気に入らない1枚を「使わない」</strong> に。
-                入れ替えはセルをタップ→別のセルをタップ。
-              </p>
-              <div className="vm-selection-counter">
-                <span className="vm-selection-count">{includedCells.length} / 8</span>
-                <span className="vm-selection-status">
-                  {includedCells.length === 8 ? "✓ 準備OK！" : "💡 「使わない」を1枚選んでください"}
-                </span>
+              <div className="vm-split-head">
+                <div>
+                  <h3 className="vm-card-title">分割画像</h3>
+                  <p className="vm-card-sub">
+                    {splitCells.length}個にカット済み。修正したいコマをタップしてください。
+                  </p>
+                </div>
+                <span className="vm-split-count">{splitCells.length}個</span>
               </div>
-              <div className="vm-reorder-grid">
+
+              <div
+                className="vm-reorder-grid"
+                style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
+              >
                 {splitCells.map((cell, index) => {
                   const isSelected = index === selectedIndex;
-                  const isSwapSrc = swapFromIndex === index;
-                  const isExcluded = cell.id === excludedCellId;
                   return (
-                    <div
+                    <button
                       key={cell.id}
-                      className={`vm-reorder-cell${isSelected || isSwapSrc ? " is-selected" : ""}${isExcluded ? " is-excluded" : ""}`}
-                      onClick={() => handleCellTap(index)}
+                      type="button"
+                      className={`vm-reorder-cell${isSelected ? " is-selected" : ""}`}
+                      onClick={() => setSelectedIndex(index)}
+                      aria-label={`${index + 1}番を選択`}
                     >
                       <span className="vm-reorder-cell-num">{index + 1}</span>
-                      <button
-                        type="button"
-                        className={`vm-cell-exclude-btn${isExcluded ? " is-excluded" : ""}`}
-                        onClick={(e) => { e.stopPropagation(); toggleExcluded(cell.id); }}
-                        title={isExcluded ? "使う" : "使わない"}
-                        aria-label={isExcluded ? "このコマを使う" : "このコマを使わない"}
-                      >
-                        {isExcluded ? "↩" : "✕"}
-                      </button>
                       <img src={cell.src} alt={cell.name} style={{ transform: transformFor(cell.id) }} />
-                      {isExcluded && <span className="vm-cell-excluded-badge">使わない</span>}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
-              {swapFromIndex !== null && (
-                <p style={{ fontSize: 11.5, color: "var(--vm-pink)", margin: "8px 0 0", fontWeight: 800, textAlign: "center" }}>
-                  入れ替えたいセルをタップ。もう一度同じセルでキャンセル。
-                </p>
-              )}
             </section>
 
-            <section className="vm-card">
-              <h3 className="vm-card-title">位置を微調整（{selectedIndex + 1}番）</h3>
-              <p className="vm-card-sub">
-                被写体がセル内で少しずれているとき、矢印で動かせます。普通はそのままでOK。
-              </p>
-              <div className="vm-edit-pad">
-                <span className="vm-edit-empty" />
-                <button type="button" aria-label="上へ" onClick={() => nudge(0, -2)}>↑</button>
-                <span className="vm-edit-empty" />
-                <button type="button" aria-label="左へ" onClick={() => nudge(-2, 0)}>←</button>
-                <button type="button" className="center" aria-label="リセット" onClick={resetOffset}>0</button>
-                <button type="button" aria-label="右へ" onClick={() => nudge(2, 0)}>→</button>
-                <span className="vm-edit-empty" />
-                <button type="button" aria-label="下へ" onClick={() => nudge(0, 2)}>↓</button>
-                <span className="vm-edit-empty" />
-              </div>
-            </section>
+            {selectedCell && (
+              <section className="vm-card vm-edit-panel">
+                <div className="vm-edit-head">
+                  <h3 className="vm-card-title">{selectedIndex + 1}番を部分修正</h3>
+                  <button type="button" className="vm-topbar-btn" onClick={resetOffset}>
+                    リセット
+                  </button>
+                </div>
+                <div className="vm-edit-body">
+                  <div className="vm-edit-preview">
+                    <img src={selectedCell.src} alt={selectedCell.name} style={{ transform: transformFor(selectedCell.id) }} />
+                  </div>
+                  <div className="vm-edit-actions">
+                    <div className="vm-edit-pad" aria-label="位置調整">
+                      <span className="vm-edit-empty" />
+                      <button type="button" aria-label="上へ" onClick={() => nudge(0, -2)}>↑</button>
+                      <span className="vm-edit-empty" />
+                      <button type="button" aria-label="左へ" onClick={() => nudge(-2, 0)}>←</button>
+                      <button type="button" className="center" aria-label="中央に戻す" onClick={resetOffset}>0</button>
+                      <button type="button" aria-label="右へ" onClick={() => nudge(2, 0)}>→</button>
+                      <span className="vm-edit-empty" />
+                      <button type="button" aria-label="下へ" onClick={() => nudge(0, 2)}>↓</button>
+                      <span className="vm-edit-empty" />
+                    </div>
+                    <div className="vm-zoom-row">
+                      <button type="button" onClick={() => nudgeScale(-0.05)}>小さく</button>
+                      <span>{Math.round((offsetFor(selectedCell.id).scale ?? 1) * 100)}%</span>
+                      <button type="button" onClick={() => nudgeScale(0.05)}>大きく</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {splitCells.length === expectedCellCount && (
+              <Step3MobileSave splitCells={splitCells} cellOffsets={cellOffsets} />
+            )}
           </>
-        )}
-
-        {step === 3 && (
-          <Step3MobileSave
-            splitCells={includedCells}
-            cellOffsets={cellOffsets}
-          />
         )}
       </main>
 
-      {/* ── 下部ナビ ─────────────────── */}
-      <div className="vm-bottombar">
-        <button
-          type="button"
-          disabled={step === 1}
-          onClick={() => setStep((s) => Math.max(1, s - 1) as StepId)}
-        >
-          ← 戻る
-        </button>
-        {step < 3 ? (
-          <button
-            type="button"
-            className="is-primary"
-            disabled={!canGoNext}
-            onClick={() => setStep((s) => Math.min(3, s + 1) as StepId)}
-          >
-            次へ →
-          </button>
-        ) : (
-          <a
-            className="is-primary"
-            href="https://apps.apple.com/jp/app/line-creators-studio/id1063713656"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="LINEスタンプメーカー（公式アプリ）を開く"
-          >
-            📱 LINEスタンプメーカー ↗
-          </a>
-        )}
-      </div>
-
-      {/* ── デザインルーム（1ページ1ステップのウィザード） ───── */}
       {showDesignRoom && (
         <div className="vm-sheet-overlay" onClick={(e) => {
           if (e.target === e.currentTarget) setShowDesignRoom(false);
@@ -463,7 +371,7 @@ export default function StampToolMobile() {
             <div className="vm-sheet-bar">
               <span className="vm-sheet-title">
                 <small>DESIGN ROOM ・ {drStep} / 4</small>
-                ✨ プロンプトを作る
+                プロンプトを作る
               </span>
               <button
                 type="button"
@@ -475,7 +383,6 @@ export default function StampToolMobile() {
               </button>
             </div>
 
-            {/* 進捗ドット */}
             <div className="vm-dr-progress" aria-hidden="true">
               {[1, 2, 3, 4].map((n) => (
                 <span key={n} className={`vm-dr-dot${drStep === n ? " is-active" : ""}${drStep > n ? " is-done" : ""}`} />
@@ -483,14 +390,12 @@ export default function StampToolMobile() {
             </div>
 
             <div className="vm-dr-body">
-              {/* ── ① テンプレートを選ぼう ─────────── */}
               {drStep === 1 && (
                 <section className="vm-dr-page">
                   <div className="vm-dr-step-head">
                     <span className="vm-dr-step-num">1</span>
-                    <span className="vm-dr-step-title">テンプレートを選ぼう</span>
+                    <span className="vm-dr-step-title">テンプレートを選ぶ</span>
                   </div>
-                  <p className="vm-dr-step-q">どんな雰囲気にする？タップで選べるよ</p>
                   <div className="vm-frame-list-3">
                     {mobileFrames.map((f) => (
                       <button
@@ -524,14 +429,12 @@ export default function StampToolMobile() {
                 </section>
               )}
 
-              {/* ── ② あなたのペットを教えてね ───────── */}
               {drStep === 2 && (
                 <section className="vm-dr-page">
                   <div className="vm-dr-step-head">
                     <span className="vm-dr-step-num">2</span>
-                    <span className="vm-dr-step-title">あなたのペットを教えてね 🐾</span>
+                    <span className="vm-dr-step-title">動物の種類を選ぶ</span>
                   </div>
-                  <p className="vm-dr-step-q">犬？ 猫？ うさぎ？ ハムスター？</p>
                   <div className="vm-pet-grid">
                     {PET_KIND_OPTIONS.map(({ kind, emoji, label }) => (
                       <button
@@ -551,21 +454,19 @@ export default function StampToolMobile() {
                       type="text"
                       value={petKindOther}
                       onChange={(e) => setPetKindOther(e.target.value)}
-                      placeholder="例：インコ / フェレット / モルモット"
+                      placeholder="例：インコ / フェレット"
                       style={{ marginTop: 10 }}
                     />
                   )}
                 </section>
               )}
 
-              {/* ── ③ こだわりポイント ──────────────── */}
               {drStep === 3 && (
                 <section className="vm-dr-page">
                   <div className="vm-dr-step-head">
                     <span className="vm-dr-step-num">3</span>
-                    <span className="vm-dr-step-title">こだわりポイント、ある？</span>
+                    <span className="vm-dr-step-title">特徴を入れる</span>
                   </div>
-                  <p className="vm-dr-step-q">毛色・耳・目の色など、教えてくれたらもっと似せられるよ（なくてもOK・スキップしてもOK）</p>
                   <textarea
                     id="vm-features"
                     className="vm-form-textarea"
@@ -577,30 +478,27 @@ export default function StampToolMobile() {
                 </section>
               )}
 
-              {/* ── ④ プロンプトをコピー！ ──────────── */}
               {drStep === 4 && (
                 <section className="vm-dr-page">
                   <div className="vm-dr-step-head">
                     <span className="vm-dr-step-num">4</span>
-                    <span className="vm-dr-step-title">あなた専用プロンプトをコピー！</span>
+                    <span className="vm-dr-step-title">{gridLabel}用プロンプト</span>
                   </div>
-                  <p className="vm-dr-step-q">準備OK！ボタンを押すとプロンプトがコピーされるよ</p>
                   <button
                     type="button"
                     className={`vm-copy-btn${copied ? " is-copied" : ""}`}
                     onClick={handleCopy}
                     disabled={!canCopy}
                   >
-                    {copied ? "✓ コピーしました！" : "📋 プロンプトをコピー"}
+                    {copied ? "コピーしました" : "プロンプトをコピー"}
                   </button>
                   <p className="vm-dr-flow">
-                    コピーしたら ChatGPT にペット写真と一緒に貼って → 3×3画像ができたら、この画面に戻ってアップロード → カメラロール保存 → <strong>LINEスタンプメーカー（公式アプリ）</strong>の切り抜き機能で綺麗に透過できます ✨
+                    ChatGPTで{gridLabel}画像を作り、この画面に戻ってアップロードします。
                   </p>
                 </section>
               )}
             </div>
 
-            {/* ── ウィザードナビ ─────────────── */}
             <div className="vm-dr-nav">
               <button
                 type="button"
@@ -608,7 +506,7 @@ export default function StampToolMobile() {
                 onClick={() => setDrStep((s) => Math.max(1, s - 1) as 1 | 2 | 3 | 4)}
                 disabled={drStep === 1}
               >
-                ← 戻る
+                戻る
               </button>
               {drStep < 4 ? (
                 <button
@@ -617,7 +515,7 @@ export default function StampToolMobile() {
                   onClick={() => setDrStep((s) => Math.min(4, s + 1) as 1 | 2 | 3 | 4)}
                   disabled={drStep === 2 && !canCopy}
                 >
-                  {drStep === 3 ? "プロンプトを作る →" : "次へ →"}
+                  次へ
                 </button>
               ) : (
                 <button
@@ -625,25 +523,21 @@ export default function StampToolMobile() {
                   className="vm-dr-nav-next"
                   onClick={() => setShowDesignRoom(false)}
                 >
-                  閉じる ✓
+                  閉じる
                 </button>
               )}
             </div>
-            {drStep === 2 && !canCopy && (
-              <p className="vm-dr-nav-hint">↑ ペットの種類を選ぶと次へ進めます</p>
-            )}
           </div>
         </div>
       )}
 
-      {/* ── 注意モーダル ─────────────────── */}
       {showNotice && (
         <div className="vm-sheet-overlay" onClick={(e) => {
           if (e.target === e.currentTarget) setShowNotice(false);
         }}>
           <div className="vm-sheet">
             <div className="vm-sheet-bar">
-              <span className="vm-sheet-title">ℹ️ ご利用にあたって</span>
+              <span className="vm-sheet-title">ご利用にあたって</span>
               <button
                 type="button"
                 className="vm-sheet-close"
@@ -656,27 +550,17 @@ export default function StampToolMobile() {
             <div className="vm-notice-body">
               <h4>このツールの位置づけ</h4>
               <p>
-                AIで作った3×3画像を <strong>9マスに分割し、お気に入りの8枚をカメラロールに保存</strong> するためのツールです。画像生成・透過・LINE審査は範囲外。
+                AIで作ったグリッド画像を分割し、必要なコマだけ位置や大きさを整えて保存するためのスマホ版です。
               </p>
-              <h4>📝 LINE審査について</h4>
+              <h4>LINE審査について</h4>
               <p>
-                出力は LINEスタンプメーカー（公式iOSアプリ）へ渡せる形式ですが、<strong>審査の通過を保証するものではありません。</strong>
+                出力画像は素材準備用です。LINE Creators MarketやLINEスタンプメーカーでの最終確認は別途行ってください。
               </p>
-              <h4>⚠️ 著作権・肖像権</h4>
+              <h4>権利関係</h4>
               <ul>
                 <li>ご自身が撮影した、または使用許諾のある写真のみ使用してください</li>
-                <li>既存のキャラクター・有名人・他人のペットを真似た画像はNG</li>
+                <li>既存のキャラクター・有名人・他人のペットを真似た画像は避けてください</li>
               </ul>
-              <h4>🤖 生成AIの利用</h4>
-              <ul>
-                <li>ChatGPT推奨。他AIでも使えますが雰囲気が変わる場合あり</li>
-                <li>各AIサービスの規約・商用利用ポリシーをご確認ください</li>
-              </ul>
-              <h4>🎨 透過処理</h4>
-              <p>
-                <strong>LINEスタンプメーカー（公式アプリ）</strong> の切り抜き機能で綺麗に透過できるので、特別な準備は不要です。
-                PCで提出したい方は、Canva・Photoshop・remove.bg などで事前に透過してもOK。本ツール自体は透過処理は行いません。
-              </p>
             </div>
             <button
               type="button"
@@ -684,7 +568,7 @@ export default function StampToolMobile() {
               onClick={() => setShowNotice(false)}
               style={{ marginTop: 14 }}
             >
-              理解しました
+              閉じる
             </button>
           </div>
         </div>

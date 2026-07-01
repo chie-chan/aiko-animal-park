@@ -12,6 +12,7 @@ export type PetKindOrNone = PetKind | null;
 export interface PromptInput {
   petKind: PetKindOrNone;
   petKindOther: string; // petKind === "その他" のときの自由記述
+  features?: string; // 毛色・柄など任意の特徴メモ
   stampTexts?: string[];
 }
 
@@ -62,6 +63,9 @@ function petBlock(input: PromptInput, g: GridSize) {
   const lines: string[] = [];
   lines.push(`【主役】添付画像と同一個体として描く。`);
   lines.push(`動物の種類は必ず「${kind}」として描いてください。種類を別の動物に変えないこと。`);
+  if (input.features?.trim()) {
+    lines.push(`追加特徴メモ：${input.features.trim()}。この特徴を全コマで一貫させる。`);
+  }
   lines.push(`毛色・柄・耳の形・目・体型などの特徴は、添付画像から読み取り、すべての${n}コマで一貫させる。`);
   lines.push(`顔立ち・目・耳・毛色・模様・体型を${n}枚すべてで統一し、同じ子に見えるように描く。`);
   lines.push(`人間のような5本指にはせず、その動物らしい前足で描く。`);
@@ -166,7 +170,7 @@ const DEFAULT_STAMP_TEXT_ITEMS = [
 const NO_TEXT_MARKERS = new Set(["文字なし", "なし", "無し", "(文字なし)", "（文字なし）", "-"]);
 
 export function getDefaultStampTextLines(g: GridSize): string[] {
-  const lines = DEFAULT_STAMP_TEXT_ITEMS.slice(0, cellCount(g)).map(([, text]) => text);
+  const lines: string[] = DEFAULT_STAMP_TEXT_ITEMS.slice(0, cellCount(g)).map(([, text]) => text);
   if (g === 3) lines[8] = "文字なし";
   return lines;
 }
