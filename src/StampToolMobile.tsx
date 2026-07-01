@@ -134,6 +134,7 @@ export default function StampToolMobile() {
   const cropGestureRef = useRef<CropGesture | null>(null);
   const cropPointersRef = useRef<Map<number, GesturePoint>>(new Map());
   const cellCropOverridesRef = useRef<Record<number, CellCropOverride>>({});
+  const manualCellSrcOverridesRef = useRef<Record<number, string>>({});
   const splitJobRef = useRef(0);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -188,6 +189,29 @@ export default function StampToolMobile() {
     setCellCropOverrides(next);
   }
 
+  function cancelPendingSplitWork() {
+    splitJobRef.current += 1;
+    setProcessingSplit(false);
+    setTransparencyBusy(false);
+  }
+
+  function setManualCellSrcOverride(index: number, src: string) {
+    manualCellSrcOverridesRef.current = {
+      ...manualCellSrcOverridesRef.current,
+      [index]: src,
+    };
+  }
+
+  function clearManualCellSrcOverride(index: number) {
+    const next = { ...manualCellSrcOverridesRef.current };
+    delete next[index];
+    manualCellSrcOverridesRef.current = next;
+  }
+
+  function clearManualCellSrcOverrides() {
+    manualCellSrcOverridesRef.current = {};
+  }
+
   async function handleFile(files: FileList | null) {
     if (!files || !files[0]) return;
     try {
@@ -198,6 +222,7 @@ export default function StampToolMobile() {
       setSelectedIndex(0);
       setCellOffsets({});
       setCropOverrideState({});
+      clearManualCellSrcOverrides();
     } catch (err) {
       console.error(err);
       setSplitMsg("画像の読み込みに失敗しました。");
@@ -245,6 +270,10 @@ export default function StampToolMobile() {
         ...cell,
         src: await centerImageContent(cell.src),
       })),
+    );
+    const manualOverrides = manualCellSrcOverridesRef.current;
+    nextCells = nextCells.map((cell, index) =>
+      manualOverrides[index] ? { ...cell, src: manualOverrides[index] } : cell,
     );
     return nextCells;
   }
@@ -353,6 +382,7 @@ export default function StampToolMobile() {
     const next = { ...cellCropOverridesRef.current };
     if (normalized) next[index] = normalized;
     else delete next[index];
+    clearManualCellSrcOverride(index);
     setCropOverrideState(next);
     void regenerateSplitCells(next, { message: "切り出し範囲を調整しています..." });
   }
@@ -383,6 +413,7 @@ export default function StampToolMobile() {
     setCellOffsets({ ...cellOffsets, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } });
     const next = { ...cellCropOverridesRef.current };
     delete next[selectedIndex];
+    clearManualCellSrcOverride(selectedIndex);
     setCropOverrideState(next);
     void regenerateSplitCells(next, { message: "個別補正をリセットしています..." });
   }
@@ -393,10 +424,12 @@ export default function StampToolMobile() {
     const targetId = selectedCell.id;
     const source = selectedCell.src;
     clearCropGesture();
+    cancelPendingSplitWork();
     setCenterBusy(true);
     setSplitMsg("");
     try {
       const nextSrc = await centerDominantImageContent(source);
+      setManualCellSrcOverride(targetIndex, nextSrc);
       setSplitCells((cells) =>
         cells.map((cell, index) => (index === targetIndex ? { ...cell, src: nextSrc } : cell)),
       );
@@ -632,6 +665,7 @@ export default function StampToolMobile() {
 
         const nextSrc = await eraseImageAtPoints(source, strokes);
         eraseSourceRef.current = nextSrc;
+        setManualCellSrcOverride(targetIndex, nextSrc);
         setSplitCells((cells) =>
           cells.map((cell, index) => (index === targetIndex ? { ...cell, src: nextSrc } : cell)),
         );
@@ -653,6 +687,7 @@ export default function StampToolMobile() {
   function startErase(event: ReactPointerEvent<HTMLDivElement>) {
     if (!eraserEnabled || !selectedCell) return;
     event.preventDefault();
+    cancelPendingSplitWork();
     event.currentTarget.setPointerCapture(event.pointerId);
     eraserPointerIdRef.current = event.pointerId;
     eraseSourceRef.current =
@@ -689,6 +724,7 @@ export default function StampToolMobile() {
     setGridSize(size);
     setSelectedIndex(0);
     setCropOverrideState({});
+    clearManualCellSrcOverrides();
     setCellOffsets({});
   }
 
