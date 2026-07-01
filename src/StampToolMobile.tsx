@@ -5,6 +5,7 @@ import {
   type GridSize,
   type SourceImage,
   defaultCuts,
+  makeImageTransparent,
   readFileAsDataUrl,
   splitSheetImage,
 } from "./stamp-v2-split";
@@ -51,7 +52,10 @@ export default function StampToolMobile() {
   const [copied, setCopied] = useState(false);
 
   const [gridSize, setGridSize] = useState<GridSize>(3);
+  const [rawSheetSrc, setRawSheetSrc] = useState<string | null>(null);
   const [sheetSrc, setSheetSrc] = useState<string | null>(null);
+  const [transparentEnabled, setTransparentEnabled] = useState(false);
+  const [transparencyBusy, setTransparencyBusy] = useState(false);
   const [splitCells, setSplitCells] = useState<SourceImage[]>([]);
   const [splitMsg, setSplitMsg] = useState("");
   const [processingSplit, setProcessingSplit] = useState(false);
@@ -101,7 +105,8 @@ export default function StampToolMobile() {
     if (!files || !files[0]) return;
     try {
       const url = await readFileAsDataUrl(files[0]);
-      setSheetSrc(url);
+      setRawSheetSrc(url);
+      setSheetSrc(null);
       setSplitMsg("");
       setSelectedIndex(0);
       setCellOffsets({});
@@ -110,6 +115,44 @@ export default function StampToolMobile() {
       setSplitMsg("画像の読み込みに失敗しました。");
     }
   }
+
+  useEffect(() => {
+    if (!rawSheetSrc) {
+      setSheetSrc(null);
+      setTransparencyBusy(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      if (!transparentEnabled) {
+        setTransparencyBusy(false);
+        setSheetSrc(rawSheetSrc);
+        return;
+      }
+
+      setTransparencyBusy(true);
+      setSplitMsg("背景を透過しています...");
+      try {
+        const transparentSrc = await makeImageTransparent(rawSheetSrc);
+        if (cancelled) return;
+        setSheetSrc(transparentSrc);
+        setSplitMsg("透過を適用しました。");
+      } catch (err) {
+        console.error(err);
+        if (cancelled) return;
+        setSheetSrc(rawSheetSrc);
+        setSplitMsg("透過に失敗したため、元画像で分割します。");
+      } finally {
+        if (!cancelled) setTransparencyBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rawSheetSrc, transparentEnabled]);
 
   useEffect(() => {
     if (!sheetSrc) {
@@ -198,6 +241,12 @@ export default function StampToolMobile() {
     setSelectedIndex(0);
   }
 
+  const busyMessage = transparencyBusy
+    ? "透過中..."
+    : processingSplit
+      ? "分割中..."
+      : splitMsg;
+
   return (
     <div className="vm-shell">
       <header className="vm-topbar">
@@ -267,15 +316,26 @@ export default function StampToolMobile() {
             onChange={(e) => handleFile(e.target.files)}
           />
 
+          <label className={`vm-transparent-toggle${transparentEnabled ? " is-on" : ""}`}>
+            <input
+              type="checkbox"
+              checked={transparentEnabled}
+              disabled={transparencyBusy}
+              onChange={(e) => setTransparentEnabled(e.target.checked)}
+            />
+            <span>自動透過</span>
+            <small>白背景をPC版と同じ方式で透明にします</small>
+          </label>
+
           {sheetSrc && (
             <div className="vm-source-preview">
               <img src={sheetSrc} alt="取り込んだ画像" />
             </div>
           )}
 
-          {(processingSplit || splitMsg) && (
+          {(transparencyBusy || processingSplit || splitMsg) && (
             <p className={`vm-inline-msg${splitMsg.includes("失敗") ? " is-error" : ""}`}>
-              {processingSplit ? "分割中..." : splitMsg}
+              {busyMessage}
             </p>
           )}
         </section>
