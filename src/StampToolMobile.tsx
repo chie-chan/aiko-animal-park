@@ -8,6 +8,7 @@ import {
 } from "react";
 import "./stamp-mobile.css";
 import {
+  type CellCropOverride,
   type CellOffset,
   type EraseStroke,
   type GridSize,
@@ -48,12 +49,21 @@ const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
   { kind: "その他", emoji: "✨", label: "その他" },
 ];
 
-function clampOffset(v: number) {
-  return Math.max(-50, Math.min(50, v));
-}
-
-function clampScale(v: number) {
-  return Math.max(0.65, Math.min(1.8, v));
+function normalizeCropOverride(next: CellCropOverride): CellCropOverride | null {
+  const normalized: CellCropOverride = {
+    shiftX: Math.max(-8, Math.min(8, next.shiftX ?? 0)),
+    shiftY: Math.max(-8, Math.min(8, next.shiftY ?? 0)),
+    padX: Math.max(0, Math.min(8, next.padX ?? 0)),
+    padY: Math.max(0, Math.min(8, next.padY ?? 0)),
+    zoom: Math.max(-8, Math.min(8, next.zoom ?? 0)),
+  };
+  const active =
+    Math.abs(normalized.shiftX ?? 0) > 0.05 ||
+    Math.abs(normalized.shiftY ?? 0) > 0.05 ||
+    Math.abs(normalized.padX ?? 0) > 0.05 ||
+    Math.abs(normalized.padY ?? 0) > 0.05 ||
+    Math.abs(normalized.zoom ?? 0) > 0.05;
+  return active ? normalized : null;
 }
 
 export default function StampToolMobile() {
@@ -76,6 +86,7 @@ export default function StampToolMobile() {
   const [splitMsg, setSplitMsg] = useState("");
   const [processingSplit, setProcessingSplit] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editPreviewRef = useRef<HTMLDivElement>(null);
   const eraseBusyRef = useRef(false);
@@ -138,6 +149,7 @@ export default function StampToolMobile() {
       setSplitMsg("");
       setSelectedIndex(0);
       setCellOffsets({});
+      setCellCropOverrides({});
     } catch (err) {
       console.error(err);
       setSplitMsg("画像の読み込みに失敗しました。");
@@ -155,6 +167,58 @@ export default function StampToolMobile() {
     setTransparencyBusy(false);
   }, [rawSheetSrc]);
 
+  async function buildSplitCells(overrides: Record<number, CellCropOverride>) {
+    if (!sheetSrc) return [];
+    const cuts = defaultCuts(gridSize);
+    const cells = await splitSheetImage(sheetSrc, 0, 0, cuts, cuts, gridSize, gridSize, overrides);
+    let nextCells = cells.map((cell, index) => ({
+      ...cell,
+      id: `mobile-cell-${index}`,
+      name: `stamp_${String(index + 1).padStart(2, "0")}.png`,
+    }));
+    if (transparentEnabled) {
+      setTransparencyBusy(true);
+      setSplitMsg("分割画像を透過しています...");
+      nextCells = await Promise.all(
+        nextCells.map(async (cell) => ({
+          ...cell,
+          src: await makeImageTransparent(cell.src),
+        })),
+      );
+    }
+    return nextCells;
+  }
+
+  async function regenerateSplitCells(
+    overrides: Record<number, CellCropOverride>,
+    options: { resetSelection?: boolean; message?: string } = {},
+  ) {
+    if (!sheetSrc) return;
+    const keepIndex = Math.min(selectedIndex, Math.max(0, expectedCellCount - 1));
+    setProcessingSplit(true);
+    setSplitMsg(options.message ?? "");
+    try {
+      const nextCells = await buildSplitCells(overrides);
+      setSplitCells(nextCells);
+      setSelectedIndex(options.resetSelection ? 0 : Math.min(keepIndex, Math.max(0, nextCells.length - 1)));
+      if (options.resetSelection) setCellOffsets({});
+      eraseSourceRef.current = null;
+      eraseTargetIndexRef.current = null;
+      setSplitMsg(
+        transparentEnabled
+          ? `${nextCells.length}個に分割して透過しました。`
+          : `${nextCells.length}個に分割しました。`,
+      );
+    } catch (err) {
+      console.error(err);
+      setSplitCells([]);
+      setSplitMsg("分割に失敗しました。画像を確認してください。");
+    } finally {
+      setProcessingSplit(false);
+      setTransparencyBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!sheetSrc) {
       setSplitCells([]);
@@ -168,24 +232,13 @@ export default function StampToolMobile() {
 
     (async () => {
       try {
-        const cuts = defaultCuts(gridSize);
-        const cells = await splitSheetImage(sheetSrc, 0, 0, cuts, cuts, gridSize, gridSize);
+        const nextCells = await buildSplitCells(cellCropOverrides);
         if (cancelled) return;
-        let nextCells = cells;
-        if (transparentEnabled) {
-          setTransparencyBusy(true);
-          setSplitMsg("分割画像を透過しています...");
-          nextCells = await Promise.all(
-            cells.map(async (cell) => ({
-              ...cell,
-              src: await makeImageTransparent(cell.src),
-            })),
-          );
-          if (cancelled) return;
-        }
         setSplitCells(nextCells);
         setSelectedIndex(0);
         setCellOffsets({});
+        eraseSourceRef.current = null;
+        eraseTargetIndexRef.current = null;
         setSplitMsg(
           transparentEnabled
             ? `${nextCells.length}個に分割して透過しました。`
@@ -208,6 +261,8 @@ export default function StampToolMobile() {
     return () => {
       cancelled = true;
     };
+    // cellCropOverrides は個別補正時に手動再分割するため、ここでは依存させない。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetSrc, gridSize, transparentEnabled]);
 
   function offsetFor(id: string): CellOffset {
@@ -219,34 +274,47 @@ export default function StampToolMobile() {
     };
   }
 
-  function setSelectedOffset(patch: Partial<CellOffset>) {
-    if (!selectedCell) return;
-    const current = offsetFor(selectedCell.id);
-    setCellOffsets({
-      ...cellOffsets,
-      [selectedCell.id]: {
-        dx: clampOffset(patch.dx ?? current.dx),
-        dy: clampOffset(patch.dy ?? current.dy),
-        scale: clampScale(patch.scale ?? current.scale ?? 1),
-      },
+  function cropOverrideFor(index: number): CellCropOverride {
+    return { shiftX: 0, shiftY: 0, padX: 0, padY: 0, zoom: 0, ...(cellCropOverrides[index] ?? {}) };
+  }
+
+  function hasCropOverride(index: number) {
+    return Boolean(cellCropOverrides[index]);
+  }
+
+  function updateSelectedCropOverride(patch: Partial<CellCropOverride>) {
+    const current = cropOverrideFor(selectedIndex);
+    const normalized = normalizeCropOverride({ ...current, ...patch });
+    const next = { ...cellCropOverrides };
+    if (normalized) next[selectedIndex] = normalized;
+    else delete next[selectedIndex];
+    setCellCropOverrides(next);
+    void regenerateSplitCells(next, { message: "切り出し範囲を調整しています..." });
+  }
+
+  function nudgeCrop(dx: number, dy: number) {
+    const current = cropOverrideFor(selectedIndex);
+    updateSelectedCropOverride({
+      shiftX: (current.shiftX ?? 0) + dx,
+      shiftY: (current.shiftY ?? 0) + dy,
     });
   }
 
-  function nudge(dx: number, dy: number) {
-    if (!selectedCell) return;
-    const current = offsetFor(selectedCell.id);
-    setSelectedOffset({ dx: current.dx + dx, dy: current.dy + dy });
-  }
-
-  function nudgeScale(delta: number) {
-    if (!selectedCell) return;
-    const current = offsetFor(selectedCell.id);
-    setSelectedOffset({ scale: (current.scale ?? 1) + delta });
+  function expandCrop(delta: number) {
+    const current = cropOverrideFor(selectedIndex);
+    updateSelectedCropOverride({
+      padX: (current.padX ?? 0) + delta,
+      padY: (current.padY ?? 0) + delta,
+    });
   }
 
   function resetOffset() {
     if (!selectedCell) return;
     setCellOffsets({ ...cellOffsets, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } });
+    const next = { ...cellCropOverrides };
+    delete next[selectedIndex];
+    setCellCropOverrides(next);
+    void regenerateSplitCells(next, { message: "個別補正をリセットしています..." });
   }
 
   function transformFor(id: string) {
@@ -378,6 +446,8 @@ export default function StampToolMobile() {
   function changeGridSize(size: GridSize) {
     setGridSize(size);
     setSelectedIndex(0);
+    setCellCropOverrides({});
+    setCellOffsets({});
   }
 
   function handleDrop(event: DragEvent<HTMLButtonElement>) {
@@ -518,12 +588,13 @@ export default function StampToolMobile() {
                     <button
                       key={cell.id}
                       type="button"
-                      className={`vm-reorder-cell${isSelected ? " is-selected" : ""}`}
+                      className={`vm-reorder-cell${isSelected ? " is-selected" : ""}${hasCropOverride(index) ? " is-crop-adjusted" : ""}`}
                       onClick={() => setSelectedIndex(index)}
                       aria-label={`${index + 1}番を選択`}
                     >
                       <span className="vm-reorder-cell-num">{index + 1}</span>
                       <img src={cell.src} alt={cell.name} style={{ transform: transformFor(cell.id) }} />
+                      {hasCropOverride(index) && <span className="vm-crop-badge">補正</span>}
                     </button>
                   );
                 })}
@@ -593,19 +664,19 @@ export default function StampToolMobile() {
                     {eraseBusy && <p className="vm-eraser-status">消しています...</p>}
                     <div className="vm-edit-pad" aria-label="位置調整">
                       <span className="vm-edit-empty" />
-                      <button type="button" aria-label="上へ" onClick={() => nudge(0, -2)}>↑</button>
+                      <button type="button" aria-label="切り出し範囲を上へ" onClick={() => nudgeCrop(0, -1)}>↑</button>
                       <span className="vm-edit-empty" />
-                      <button type="button" aria-label="左へ" onClick={() => nudge(-2, 0)}>←</button>
+                      <button type="button" aria-label="切り出し範囲を左へ" onClick={() => nudgeCrop(-1, 0)}>←</button>
                       <button type="button" className="center" aria-label="中央に戻す" onClick={resetOffset}>0</button>
-                      <button type="button" aria-label="右へ" onClick={() => nudge(2, 0)}>→</button>
+                      <button type="button" aria-label="切り出し範囲を右へ" onClick={() => nudgeCrop(1, 0)}>→</button>
                       <span className="vm-edit-empty" />
-                      <button type="button" aria-label="下へ" onClick={() => nudge(0, 2)}>↓</button>
+                      <button type="button" aria-label="切り出し範囲を下へ" onClick={() => nudgeCrop(0, 1)}>↓</button>
                       <span className="vm-edit-empty" />
                     </div>
                     <div className="vm-zoom-row">
-                      <button type="button" onClick={() => nudgeScale(-0.05)}>小さく</button>
-                      <span>{Math.round((offsetFor(selectedCell.id).scale ?? 1) * 100)}%</span>
-                      <button type="button" onClick={() => nudgeScale(0.05)}>大きく</button>
+                      <button type="button" onClick={() => expandCrop(-0.5)}>狭く</button>
+                      <span>範囲 +{Math.max(cropOverrideFor(selectedIndex).padX ?? 0, cropOverrideFor(selectedIndex).padY ?? 0).toFixed(1)}%</span>
+                      <button type="button" onClick={() => expandCrop(0.5)}>広げる</button>
                     </div>
                   </div>
                 </div>
