@@ -1,10 +1,18 @@
-import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type DragEvent,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import "./stamp-mobile.css";
 import {
   type CellOffset,
   type GridSize,
   type SourceImage,
   defaultCuts,
+  eraseImageAtPoints,
   makeImageTransparent,
   readFileAsDataUrl,
   splitSheetImage,
@@ -61,9 +69,13 @@ export default function StampToolMobile() {
   const [processingSplit, setProcessingSplit] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editPreviewRef = useRef<HTMLDivElement>(null);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
+  const [eraserEnabled, setEraserEnabled] = useState(false);
+  const [eraseBusy, setEraseBusy] = useState(false);
+  const [eraserRadius, setEraserRadius] = useState(18);
 
   useEffect(() => {
     if (showDesignRoom) setDrStep(1);
@@ -229,6 +241,58 @@ export default function StampToolMobile() {
     return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
   }
 
+  function pointFromEditPreview(event: ReactPointerEvent<HTMLDivElement>) {
+    const preview = editPreviewRef.current;
+    const img = preview?.querySelector("img");
+    if (!preview || !img) return null;
+
+    const rect = img.getBoundingClientRect();
+    const imageW = img.naturalWidth || 1;
+    const imageH = img.naturalHeight || 1;
+    const previewRatio = rect.width / rect.height;
+    const imageRatio = imageW / imageH;
+    let drawW = rect.width;
+    let drawH = rect.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (imageRatio > previewRatio) {
+      drawH = rect.width / imageRatio;
+      offsetY = (rect.height - drawH) / 2;
+    } else {
+      drawW = rect.height * imageRatio;
+      offsetX = (rect.width - drawW) / 2;
+    }
+
+    const x = (event.clientX - rect.left - offsetX) / drawW;
+    const y = (event.clientY - rect.top - offsetY) / drawH;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return { x, y };
+  }
+
+  async function eraseSelectedPoint(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!eraserEnabled || eraseBusy || !selectedCell) return;
+    event.preventDefault();
+    const point = pointFromEditPreview(event);
+    if (!point) return;
+
+    setEraseBusy(true);
+    setSplitMsg("");
+    try {
+      const nextSrc = await eraseImageAtPoints(selectedCell.src, [
+        { x: point.x, y: point.y, radius: eraserRadius },
+      ]);
+      setSplitCells((cells) =>
+        cells.map((cell, index) => (index === selectedIndex ? { ...cell, src: nextSrc } : cell)),
+      );
+    } catch (err) {
+      console.error(err);
+      setSplitMsg("消しゴム処理に失敗しました。");
+    } finally {
+      setEraseBusy(false);
+    }
+  }
+
   function changeGridSize(size: GridSize) {
     setGridSize(size);
     setSelectedIndex(0);
@@ -329,17 +393,6 @@ export default function StampToolMobile() {
             onChange={(e) => handleFile(e.target.files)}
           />
 
-          <label className={`vm-transparent-toggle${transparentEnabled ? " is-on" : ""}`}>
-            <input
-              type="checkbox"
-              checked={transparentEnabled}
-              disabled={transparencyBusy}
-              onChange={(e) => setTransparentEnabled(e.target.checked)}
-            />
-            <span>自動透過</span>
-            <small>白背景をPC版と同じ方式で透明にします</small>
-          </label>
-
           {sheetSrc && (
             <div className="vm-source-preview">
               <img src={sheetSrc} alt="取り込んだ画像" />
@@ -393,6 +446,17 @@ export default function StampToolMobile() {
                   );
                 })}
               </div>
+
+              <label className={`vm-transparent-toggle vm-transparent-after-split${transparentEnabled ? " is-on" : ""}`}>
+                <input
+                  type="checkbox"
+                  checked={transparentEnabled}
+                  disabled={transparencyBusy}
+                  onChange={(e) => setTransparentEnabled(e.target.checked)}
+                />
+                <span>自動透過</span>
+                <small>分割後の各コマに、PC版と同じ白背景透過をかけます</small>
+              </label>
             </section>
 
             {selectedCell && (
@@ -404,10 +468,45 @@ export default function StampToolMobile() {
                   </button>
                 </div>
                 <div className="vm-edit-body">
-                  <div className="vm-edit-preview">
-                    <img src={selectedCell.src} alt={selectedCell.name} style={{ transform: transformFor(selectedCell.id) }} />
+                  <div
+                    ref={editPreviewRef}
+                    className={`vm-edit-preview${eraserEnabled ? " is-eraser" : ""}`}
+                    onPointerDown={eraseSelectedPoint}
+                  >
+                    <img
+                      src={selectedCell.src}
+                      alt={selectedCell.name}
+                      style={{ transform: transformFor(selectedCell.id) }}
+                    />
+                    {eraserEnabled && <span className="vm-eraser-hint">タップで消す</span>}
                   </div>
                   <div className="vm-edit-actions">
+                    <div className="vm-eraser-row">
+                      <button
+                        type="button"
+                        className={eraserEnabled ? "is-on" : ""}
+                        onClick={() => setEraserEnabled((v) => !v)}
+                        disabled={eraseBusy}
+                      >
+                        消しゴム
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEraserRadius((r) => Math.max(8, r - 4))}
+                        disabled={eraseBusy}
+                      >
+                        小
+                      </button>
+                      <span>{eraserRadius}px</span>
+                      <button
+                        type="button"
+                        onClick={() => setEraserRadius((r) => Math.min(48, r + 4))}
+                        disabled={eraseBusy}
+                      >
+                        大
+                      </button>
+                    </div>
+                    {eraseBusy && <p className="vm-eraser-status">消しています...</p>}
                     <div className="vm-edit-pad" aria-label="位置調整">
                       <span className="vm-edit-empty" />
                       <button type="button" aria-label="上へ" onClick={() => nudge(0, -2)}>↑</button>
