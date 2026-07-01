@@ -405,6 +405,111 @@ export async function centerImageContent(
  * シート画像を gridRows × gridCols に分割。
  * verticalCuts.length === gridCols - 1、horizontalCuts.length === gridRows - 1 を期待。
  */
+export async function centerDominantImageContent(
+  src: string,
+  alphaThreshold = 8,
+): Promise<string> {
+  const img = await loadImage(src);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return src;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src;
+  ctx.drawImage(img, 0, 0);
+
+  let data: ImageData;
+  try {
+    data = ctx.getImageData(0, 0, w, h);
+  } catch {
+    return src;
+  }
+
+  const alpha = data.data;
+  const total = w * h;
+  const visited = new Uint8Array(total);
+  const stack = new Int32Array(total);
+  const components: Array<{ count: number; x0: number; y0: number; x1: number; y1: number }> = [];
+
+  for (let start = 0; start < total; start += 1) {
+    if (visited[start] || alpha[start * 4 + 3] <= alphaThreshold) continue;
+
+    let sp = 0;
+    visited[start] = 1;
+    stack[sp] = start;
+    sp += 1;
+
+    let count = 0;
+    let x0 = w;
+    let y0 = h;
+    let x1 = -1;
+    let y1 = -1;
+
+    while (sp > 0) {
+      sp -= 1;
+      const idx = stack[sp];
+      const x = idx % w;
+      const y = (idx / w) | 0;
+      count += 1;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+
+      for (let ny = y - 1; ny <= y + 1; ny += 1) {
+        if (ny < 0 || ny >= h) continue;
+        for (let nx = x - 1; nx <= x + 1; nx += 1) {
+          if (nx < 0 || nx >= w || (nx === x && ny === y)) continue;
+          const next = ny * w + nx;
+          if (!visited[next] && alpha[next * 4 + 3] > alphaThreshold) {
+            visited[next] = 1;
+            stack[sp] = next;
+            sp += 1;
+          }
+        }
+      }
+    }
+
+    components.push({ count, x0, y0, x1, y1 });
+  }
+
+  if (!components.length) return src;
+  const maxCount = components.reduce((max, component) => Math.max(max, component.count), 0);
+  const minKeepCount = Math.max(8, Math.floor(maxCount * 0.015));
+  const kept = components.filter((component) => component.count >= minKeepCount);
+  if (!kept.length) return centerImageContent(src, alphaThreshold);
+
+  let x0 = w;
+  let y0 = h;
+  let x1 = -1;
+  let y1 = -1;
+  for (const component of kept) {
+    if (component.x0 < x0) x0 = component.x0;
+    if (component.y0 < y0) y0 = component.y0;
+    if (component.x1 > x1) x1 = component.x1;
+    if (component.y1 > y1) y1 = component.y1;
+  }
+  if (x1 < 0) return src;
+
+  const cw = x1 - x0 + 1;
+  const ch = y1 - y0 + 1;
+  const dx = Math.round((w - cw) / 2 - x0);
+  const dy = Math.round((h - ch) / 2 - y0);
+  if (dx === 0 && dy === 0) return src;
+
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  const octx = out.getContext("2d");
+  if (!octx) return src;
+  octx.clearRect(0, 0, w, h);
+  octx.drawImage(img, dx, dy);
+  return out.toDataURL("image/png");
+}
+
 export async function splitSheetImage(
   src: string,
   outerPadding: number,

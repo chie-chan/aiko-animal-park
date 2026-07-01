@@ -589,6 +589,24 @@
 .vm-eraser-status.is-visible {
   opacity: 1;
 }
+.vm-center-row {
+  display: grid;
+  margin: 0 0 8px;
+}
+.vm-center-row button {
+  min-height: 38px;
+  border: 1.5px solid var(--vm-purple);
+  background: linear-gradient(135deg, #fbf8ff, #f2eaff);
+  border-radius: 10px;
+  color: var(--vm-purple);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.vm-center-row button:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
 .vm-edit-pad button {
   height: 44px;
   border: 1.5px solid var(--vm-line);

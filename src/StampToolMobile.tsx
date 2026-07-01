@@ -14,6 +14,7 @@ import {
   type EraseStroke,
   type GridSize,
   type SourceImage,
+  centerDominantImageContent,
   centerImageContent,
   defaultCuts,
   eraseImageAtPoints,
@@ -141,6 +142,7 @@ export default function StampToolMobile() {
   const [eraseBusy, setEraseBusy] = useState(false);
   const [erasing, setErasing] = useState(false);
   const [eraserRadius, setEraserRadius] = useState(10);
+  const [centerBusy, setCenterBusy] = useState(false);
   const [cropGesturing, setCropGesturing] = useState(false);
   const [gesturePreviewTransform, setGesturePreviewTransform] = useState<string | undefined>();
 
@@ -383,6 +385,34 @@ export default function StampToolMobile() {
     delete next[selectedIndex];
     setCropOverrideState(next);
     void regenerateSplitCells(next, { message: "個別補正をリセットしています..." });
+  }
+
+  async function centerSelectedContent() {
+    if (!selectedCell || centerBusy || eraseBusy) return;
+    const targetIndex = selectedIndex;
+    const targetId = selectedCell.id;
+    const source = selectedCell.src;
+    clearCropGesture();
+    setCenterBusy(true);
+    setSplitMsg("");
+    try {
+      const nextSrc = await centerDominantImageContent(source);
+      setSplitCells((cells) =>
+        cells.map((cell, index) => (index === targetIndex ? { ...cell, src: nextSrc } : cell)),
+      );
+      setCellOffsets((current) => ({
+        ...current,
+        [targetId]: { dx: 0, dy: 0, scale: 1 },
+      }));
+      if (eraseTargetIndexRef.current === targetIndex) {
+        eraseSourceRef.current = nextSrc;
+      }
+    } catch (err) {
+      console.error(err);
+      setSplitMsg("中央寄せに失敗しました。");
+    } finally {
+      setCenterBusy(false);
+    }
   }
 
   function transformFor(id: string) {
@@ -898,6 +928,15 @@ export default function StampToolMobile() {
                         {eraseBusy ? "消しています..." : "\u00a0"}
                       </p>
                     )}
+                    <div className="vm-center-row">
+                      <button
+                        type="button"
+                        onClick={centerSelectedContent}
+                        disabled={centerBusy || eraseBusy || processingSplit}
+                      >
+                        {centerBusy ? "中央にそろえています..." : "中央にそろえる"}
+                      </button>
+                    </div>
                     <div className="vm-edit-pad" aria-label="位置調整">
                       <span className="vm-edit-empty" />
                       <button type="button" aria-label="切り出し範囲を上へ" onClick={() => nudgeCrop(0, -1)}>↑</button>
