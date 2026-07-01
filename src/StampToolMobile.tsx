@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import "./stamp-mobile.css";
 import {
   type CellOffset,
@@ -59,6 +59,7 @@ export default function StampToolMobile() {
   const [splitCells, setSplitCells] = useState<SourceImage[]>([]);
   const [splitMsg, setSplitMsg] = useState("");
   const [processingSplit, setProcessingSplit] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -123,36 +124,9 @@ export default function StampToolMobile() {
       return;
     }
 
-    let cancelled = false;
-
-    (async () => {
-      if (!transparentEnabled) {
-        setTransparencyBusy(false);
-        setSheetSrc(rawSheetSrc);
-        return;
-      }
-
-      setTransparencyBusy(true);
-      setSplitMsg("背景を透過しています...");
-      try {
-        const transparentSrc = await makeImageTransparent(rawSheetSrc);
-        if (cancelled) return;
-        setSheetSrc(transparentSrc);
-        setSplitMsg("透過を適用しました。");
-      } catch (err) {
-        console.error(err);
-        if (cancelled) return;
-        setSheetSrc(rawSheetSrc);
-        setSplitMsg("透過に失敗したため、元画像で分割します。");
-      } finally {
-        if (!cancelled) setTransparencyBusy(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [rawSheetSrc, transparentEnabled]);
+    setSheetSrc(rawSheetSrc);
+    setTransparencyBusy(false);
+  }, [rawSheetSrc]);
 
   useEffect(() => {
     if (!sheetSrc) {
@@ -170,10 +144,26 @@ export default function StampToolMobile() {
         const cuts = defaultCuts(gridSize);
         const cells = await splitSheetImage(sheetSrc, 0, 0, cuts, cuts, gridSize, gridSize);
         if (cancelled) return;
-        setSplitCells(cells);
+        let nextCells = cells;
+        if (transparentEnabled) {
+          setTransparencyBusy(true);
+          setSplitMsg("分割画像を透過しています...");
+          nextCells = await Promise.all(
+            cells.map(async (cell) => ({
+              ...cell,
+              src: await makeImageTransparent(cell.src),
+            })),
+          );
+          if (cancelled) return;
+        }
+        setSplitCells(nextCells);
         setSelectedIndex(0);
         setCellOffsets({});
-        setSplitMsg(`${cells.length}個に分割しました。`);
+        setSplitMsg(
+          transparentEnabled
+            ? `${nextCells.length}個に分割して透過しました。`
+            : `${nextCells.length}個に分割しました。`,
+        );
       } catch (err) {
         console.error(err);
         if (!cancelled) {
@@ -181,14 +171,17 @@ export default function StampToolMobile() {
           setSplitMsg("分割に失敗しました。画像を確認してください。");
         }
       } finally {
-        if (!cancelled) setProcessingSplit(false);
+        if (!cancelled) {
+          setProcessingSplit(false);
+          setTransparencyBusy(false);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [sheetSrc, gridSize]);
+  }, [sheetSrc, gridSize, transparentEnabled]);
 
   function offsetFor(id: string): CellOffset {
     const offset = cellOffsets[id];
@@ -239,6 +232,22 @@ export default function StampToolMobile() {
   function changeGridSize(size: GridSize) {
     setGridSize(size);
     setSelectedIndex(0);
+  }
+
+  function handleDrop(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    setDragActive(false);
+    void handleFile(event.dataTransfer.files);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDragActive(true);
+  }
+
+  function handleDragLeave() {
+    setDragActive(false);
   }
 
   const busyMessage = transparencyBusy
@@ -302,11 +311,15 @@ export default function StampToolMobile() {
 
           <button
             type="button"
-            className="vm-drop-zone"
+            className={`vm-drop-zone${dragActive ? " is-dragging" : ""}`}
             onClick={() => fileInputRef.current?.click()}
+            onDragEnter={handleDragOver}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
             <strong>{sheetSrc ? "画像を差し替える" : "画像を選ぶ"}</strong>
-            <span className="hint">PNG/JPG/WebP</span>
+            <span className="hint">タップまたはドラッグ&ドロップ / PNG・JPG・WebP</span>
           </button>
           <input
             ref={fileInputRef}
