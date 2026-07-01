@@ -493,16 +493,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: none;
+  overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .vm-edit-preview.is-eraser {
   border-color: var(--vm-pink);
   box-shadow: 0 0 0 3px var(--vm-pink-soft);
   cursor: crosshair;
-  touch-action: none;
 }
 .vm-edit-preview.is-crop-touch {
   cursor: grab;
-  touch-action: none;
 }
 .vm-edit-preview.is-crop-gesture {
   border-color: var(--vm-purple);
@@ -517,8 +519,11 @@
   object-fit: contain;
   transform-origin: center;
   transition: transform 140ms ease;
+  pointer-events: none;
+  touch-action: none;
   user-select: none;
   -webkit-user-drag: none;
+  -webkit-touch-callout: none;
 }
 .vm-edit-preview.is-crop-gesture img,
 .vm-edit-preview.is-eraser img {
@@ -573,11 +578,16 @@
   color: var(--vm-muted);
 }
 .vm-eraser-status {
+  min-height: 16px;
   margin: 0 0 6px;
   font-size: 11.5px;
   font-weight: 800;
   color: var(--vm-pink);
   text-align: center;
+  opacity: 0;
+}
+.vm-eraser-status.is-visible {
+  opacity: 1;
 }
 .vm-edit-pad button {
   height: 44px;

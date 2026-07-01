@@ -1,6 +1,7 @@
 import {
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
   useEffect,
   useMemo,
   useRef,
@@ -588,27 +589,34 @@ export default function StampToolMobile() {
 
   async function flushEraseQueue() {
     if (eraseBusyRef.current) return;
-    const source = eraseSourceRef.current;
-    const strokes = eraseQueueRef.current.splice(0);
-    const targetIndex = eraseTargetIndexRef.current;
-    if (!source || !strokes.length || targetIndex === null) return;
 
     eraseBusyRef.current = true;
     setEraseBusy(true);
     setSplitMsg("");
     try {
-      const nextSrc = await eraseImageAtPoints(source, strokes);
-      eraseSourceRef.current = nextSrc;
-      setSplitCells((cells) =>
-        cells.map((cell, index) => (index === targetIndex ? { ...cell, src: nextSrc } : cell)),
-      );
+      while (eraseQueueRef.current.length) {
+        const source = eraseSourceRef.current;
+        const strokes = eraseQueueRef.current.splice(0);
+        const targetIndex = eraseTargetIndexRef.current;
+        if (!source || !strokes.length || targetIndex === null) break;
+
+        const nextSrc = await eraseImageAtPoints(source, strokes);
+        eraseSourceRef.current = nextSrc;
+        setSplitCells((cells) =>
+          cells.map((cell, index) => (index === targetIndex ? { ...cell, src: nextSrc } : cell)),
+        );
+      }
     } catch (err) {
       console.error(err);
+      eraseQueueRef.current = [];
       setSplitMsg("消しゴム処理に失敗しました。");
     } finally {
       eraseBusyRef.current = false;
-      setEraseBusy(false);
-      if (eraseQueueRef.current.length) void flushEraseQueue();
+      if (eraseQueueRef.current.length) {
+        void flushEraseQueue();
+      } else {
+        setEraseBusy(false);
+      }
     }
   }
 
@@ -641,6 +649,10 @@ export default function StampToolMobile() {
     eraserPointerIdRef.current = null;
     lastErasePointRef.current = null;
     setErasing(false);
+  }
+
+  function preventPreviewTouch(event: ReactTouchEvent<HTMLDivElement>) {
+    event.preventDefault();
   }
 
   function changeGridSize(size: GridSize) {
@@ -845,11 +857,14 @@ export default function StampToolMobile() {
                     onPointerMove={handleEditPointerMove}
                     onPointerUp={handleEditPointerUp}
                     onPointerCancel={handleEditPointerUp}
+                    onTouchStart={preventPreviewTouch}
+                    onTouchMove={preventPreviewTouch}
                   >
                     <img
                       src={selectedCell.src}
                       alt={selectedCell.name}
                       style={{ transform: previewTransformFor(selectedCell.id) }}
+                      draggable={false}
                     />
                     {eraserEnabled && <span className="vm-eraser-hint">なぞって消す</span>}
                   </div>
@@ -878,7 +893,11 @@ export default function StampToolMobile() {
                         太
                       </button>
                     </div>
-                    {eraseBusy && <p className="vm-eraser-status">消しています...</p>}
+                    {eraserEnabled && (
+                      <p className={`vm-eraser-status${eraseBusy ? " is-visible" : ""}`}>
+                        {eraseBusy ? "消しています..." : "\u00a0"}
+                      </p>
+                    )}
                     <div className="vm-edit-pad" aria-label="位置調整">
                       <span className="vm-edit-empty" />
                       <button type="button" aria-label="切り出し範囲を上へ" onClick={() => nudgeCrop(0, -1)}>↑</button>
