@@ -42,6 +42,24 @@ type EraserPoint = {
   imageH: number;
 };
 
+type GesturePoint = {
+  id: number;
+  x: number;
+  y: number;
+};
+
+type CropGesture = {
+  selectedIndex: number;
+  start: CellCropOverride;
+  startX: number;
+  startY: number;
+  startDistance: number;
+  width: number;
+  height: number;
+  draft: CellCropOverride;
+  changed: boolean;
+};
+
 const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
   { kind: "犬", emoji: "🐶", label: "犬" },
   { kind: "猫", emoji: "🐱", label: "猫" },
@@ -96,6 +114,8 @@ export default function StampToolMobile() {
   const eraseTargetIndexRef = useRef<number | null>(null);
   const lastErasePointRef = useRef<EraserPoint | null>(null);
   const eraserPointerIdRef = useRef<number | null>(null);
+  const cropGestureRef = useRef<CropGesture | null>(null);
+  const cropPointersRef = useRef<Map<number, GesturePoint>>(new Map());
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
@@ -103,6 +123,8 @@ export default function StampToolMobile() {
   const [eraseBusy, setEraseBusy] = useState(false);
   const [erasing, setErasing] = useState(false);
   const [eraserRadius, setEraserRadius] = useState(10);
+  const [cropGesturing, setCropGesturing] = useState(false);
+  const [gesturePreviewTransform, setGesturePreviewTransform] = useState<string | undefined>();
 
   useEffect(() => {
     if (showDesignRoom) setDrStep(1);
@@ -290,14 +312,18 @@ export default function StampToolMobile() {
     return Boolean(cellCropOverrides[index]);
   }
 
-  function updateSelectedCropOverride(patch: Partial<CellCropOverride>) {
-    const current = cropOverrideFor(selectedIndex);
-    const normalized = normalizeCropOverride({ ...current, ...patch });
+  function applyCropOverride(index: number, override: CellCropOverride) {
+    const normalized = normalizeCropOverride(override);
     const next = { ...cellCropOverrides };
-    if (normalized) next[selectedIndex] = normalized;
-    else delete next[selectedIndex];
+    if (normalized) next[index] = normalized;
+    else delete next[index];
     setCellCropOverrides(next);
     void regenerateSplitCells(next, { message: "切り出し範囲を調整しています..." });
+  }
+
+  function updateSelectedCropOverride(patch: Partial<CellCropOverride>) {
+    const current = cropOverrideFor(selectedIndex);
+    applyCropOverride(selectedIndex, { ...current, ...patch });
   }
 
   function nudgeCrop(dx: number, dy: number) {
@@ -330,6 +356,139 @@ export default function StampToolMobile() {
     const scale = o.scale ?? 1;
     if (!o.dx && !o.dy && scale === 1) return undefined;
     return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
+  }
+
+  function previewTransformFor(id: string) {
+    const transforms = [transformFor(id), gesturePreviewTransform].filter(Boolean);
+    return transforms.length ? transforms.join(" ") : undefined;
+  }
+
+  function gestureDistance(a: GesturePoint, b: GesturePoint) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function gestureMidpoint(a: GesturePoint, b: GesturePoint): GesturePoint {
+    return {
+      id: -1,
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+    };
+  }
+
+  function emptyCropOverride(): CellCropOverride {
+    return { shiftX: 0, shiftY: 0, padX: 0, padY: 0, zoom: 0 };
+  }
+
+  function clearCropGesture() {
+    cropGestureRef.current = null;
+    cropPointersRef.current.clear();
+    setCropGesturing(false);
+    setGesturePreviewTransform(undefined);
+  }
+
+  function makeCropGestureStart(rect: DOMRect, points: GesturePoint[], start: CellCropOverride): CropGesture {
+    const origin = points.length >= 2 ? gestureMidpoint(points[0], points[1]) : points[0];
+    return {
+      selectedIndex,
+      start,
+      startX: origin.x,
+      startY: origin.y,
+      startDistance: points.length >= 2 ? gestureDistance(points[0], points[1]) : 0,
+      width: Math.max(1, rect.width),
+      height: Math.max(1, rect.height),
+      draft: start,
+      changed: false,
+    };
+  }
+
+  function updateCropGesturePreview(points: GesturePoint[]) {
+    const gesture = cropGestureRef.current;
+    if (!gesture || points.length === 0) return;
+
+    const origin = points.length >= 2 ? gestureMidpoint(points[0], points[1]) : points[0];
+    const dxPx = origin.x - gesture.startX;
+    const dyPx = origin.y - gesture.startY;
+    const distance = points.length >= 2 ? gestureDistance(points[0], points[1]) : gesture.startDistance;
+    const pinchScale =
+      points.length >= 2 && gesture.startDistance > 0
+        ? Math.max(0.65, Math.min(1.55, distance / gesture.startDistance))
+        : 1;
+    const changed = Math.hypot(dxPx, dyPx) > 2 || Math.abs(pinchScale - 1) > 0.01;
+
+    const draft = normalizeCropOverride({
+      ...gesture.start,
+      shiftX: (gesture.start.shiftX ?? 0) - (dxPx / gesture.width) * 8,
+      shiftY: (gesture.start.shiftY ?? 0) - (dyPx / gesture.height) * 8,
+      zoom: (gesture.start.zoom ?? 0) + (pinchScale - 1) * 8,
+    });
+    gesture.draft = draft ?? emptyCropOverride();
+    gesture.changed = changed;
+    setGesturePreviewTransform(
+      `translate(${dxPx.toFixed(1)}px, ${dyPx.toFixed(1)}px) scale(${pinchScale.toFixed(3)})`,
+    );
+  }
+
+  function startCropGesture(event: ReactPointerEvent<HTMLDivElement>) {
+    if (eraserEnabled || !selectedCell || processingSplit) return;
+    event.preventDefault();
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    cropPointersRef.current.set(event.pointerId, {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    const points = Array.from(cropPointersRef.current.values());
+    const rect = event.currentTarget.getBoundingClientRect();
+    const start = cropGestureRef.current?.draft ?? cropOverrideFor(selectedIndex);
+    cropGestureRef.current = makeCropGestureStart(rect, points, start);
+    setCropGesturing(true);
+  }
+
+  function moveCropGesture(event: ReactPointerEvent<HTMLDivElement>) {
+    if (eraserEnabled || !cropGestureRef.current || !cropPointersRef.current.has(event.pointerId)) return;
+    event.preventDefault();
+    cropPointersRef.current.set(event.pointerId, {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    updateCropGesturePreview(Array.from(cropPointersRef.current.values()));
+  }
+
+  function finishCropGesture(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!cropGestureRef.current || !cropPointersRef.current.has(event.pointerId)) return;
+    event.preventDefault();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    const gesture = cropGestureRef.current;
+    cropPointersRef.current.delete(event.pointerId);
+    clearCropGesture();
+    if (gesture.changed && gesture.selectedIndex === selectedIndex) {
+      applyCropOverride(gesture.selectedIndex, gesture.draft);
+    }
+  }
+
+  function handleEditPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (eraserEnabled) startErase(event);
+    else startCropGesture(event);
+  }
+
+  function handleEditPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (eraserEnabled) moveErase(event);
+    else moveCropGesture(event);
+  }
+
+  function handleEditPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    if (eraserEnabled) stopErase(event);
+    else finishCropGesture(event);
+  }
+
+  function toggleEraser() {
+    clearCropGesture();
+    setEraserEnabled((v) => !v);
   }
 
   function pointFromEditPreview(event: ReactPointerEvent<HTMLDivElement>): EraserPoint | null {
@@ -631,16 +790,16 @@ export default function StampToolMobile() {
                 <div className="vm-edit-body">
                   <div
                     ref={editPreviewRef}
-                    className={`vm-edit-preview${eraserEnabled ? " is-eraser" : ""}${erasing ? " is-drawing" : ""}`}
-                    onPointerDown={startErase}
-                    onPointerMove={moveErase}
-                    onPointerUp={stopErase}
-                    onPointerCancel={stopErase}
+                    className={`vm-edit-preview${eraserEnabled ? " is-eraser" : " is-crop-touch"}${erasing ? " is-drawing" : ""}${cropGesturing ? " is-crop-gesture" : ""}`}
+                    onPointerDown={handleEditPointerDown}
+                    onPointerMove={handleEditPointerMove}
+                    onPointerUp={handleEditPointerUp}
+                    onPointerCancel={handleEditPointerUp}
                   >
                     <img
                       src={selectedCell.src}
                       alt={selectedCell.name}
-                      style={{ transform: transformFor(selectedCell.id) }}
+                      style={{ transform: previewTransformFor(selectedCell.id) }}
                     />
                     {eraserEnabled && <span className="vm-eraser-hint">なぞって消す</span>}
                   </div>
@@ -649,7 +808,7 @@ export default function StampToolMobile() {
                       <button
                         type="button"
                         className={eraserEnabled ? "is-on" : ""}
-                        onClick={() => setEraserEnabled((v) => !v)}
+                        onClick={toggleEraser}
                       >
                         消しゴム
                       </button>
