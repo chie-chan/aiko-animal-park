@@ -46,17 +46,25 @@
   display: flex;
   flex-direction: column;
   line-height: 1.15;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .vm-topbar-kicker {
   font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: var(--vm-purple);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .vm-topbar-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
   color: var(--vm-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .vm-topbar-actions {
   display: inline-flex;
@@ -478,13 +486,15 @@
   position: relative;
 }
 .vm-edit-body {
-  display: grid;
-  grid-template-columns: minmax(112px, 0.8fr) 1fr;
-  gap: 12px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .vm-edit-preview {
   position: relative;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
   aspect-ratio: 1 / 1;
   background: repeating-conic-gradient(#f0e0eb 0deg 90deg, #fff 90deg 180deg) 0 0 / 12px 12px;
   border: 1.5px solid var(--vm-line);
@@ -627,6 +637,7 @@
 }
 .vm-center-row button {
   min-height: 38px;
+  min-width: 0;
   border: 1.5px solid var(--vm-purple);
   background: linear-gradient(135deg, #fbf8ff, #f2eaff);
   border-radius: 10px;
@@ -635,7 +646,12 @@
   font-weight: 900;
   line-height: 1.15;
   padding: 0 8px;
+  white-space: nowrap;
   cursor: pointer;
+}
+.vm-eraser-row button,
+.vm-zoom-row button {
+  min-width: 0;
 }
 .vm-center-row .vm-reset-button {
   border-color: var(--vm-line);

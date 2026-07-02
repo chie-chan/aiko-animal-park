@@ -133,6 +133,9 @@ export default function StampToolMobile() {
   const eraserPointerIdRef = useRef<number | null>(null);
   const cropGestureRef = useRef<CropGesture | null>(null);
   const cropPointersRef = useRef<Map<number, GesturePoint>>(new Map());
+  // ピンチ/パンのプレビュー更新を1フレーム1回に間引く（毎pointermoveのsetStateを避けてなめらかに）
+  const cropRafRef = useRef<number | null>(null);
+  const cropLatestPointsRef = useRef<GesturePoint[]>([]);
   const cellCropOverridesRef = useRef<Record<number, CellCropOverride>>({});
   const manualCellSrcOverridesRef = useRef<Record<number, string>>({});
   const splitJobRef = useRef(0);
@@ -479,6 +482,11 @@ export default function StampToolMobile() {
   function clearCropGesture() {
     cropGestureRef.current = null;
     cropPointersRef.current.clear();
+    if (cropRafRef.current != null) {
+      cancelAnimationFrame(cropRafRef.current);
+      cropRafRef.current = null;
+    }
+    cropLatestPointsRef.current = [];
     setCropGesturing(false);
     setGesturePreviewTransform(undefined);
   }
@@ -551,7 +559,14 @@ export default function StampToolMobile() {
       x: event.clientX,
       y: event.clientY,
     });
-    updateCropGesturePreview(Array.from(cropPointersRef.current.values()));
+    // 毎イベントでsetStateせず、次フレームで最新値を1回だけ反映（なめらか化）
+    cropLatestPointsRef.current = Array.from(cropPointersRef.current.values());
+    if (cropRafRef.current == null) {
+      cropRafRef.current = requestAnimationFrame(() => {
+        cropRafRef.current = null;
+        if (cropGestureRef.current) updateCropGesturePreview(cropLatestPointsRef.current);
+      });
+    }
   }
 
   function finishCropGesture(event: ReactPointerEvent<HTMLDivElement>) {
@@ -560,6 +575,12 @@ export default function StampToolMobile() {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    if (cropRafRef.current != null) {
+      cancelAnimationFrame(cropRafRef.current);
+      cropRafRef.current = null;
+    }
+    const latestPoints = Array.from(cropPointersRef.current.values());
+    if (latestPoints.length > 0) updateCropGesturePreview(latestPoints);
     const gesture = cropGestureRef.current;
     cropPointersRef.current.delete(event.pointerId);
     clearCropGesture();
@@ -756,7 +777,7 @@ export default function StampToolMobile() {
         <div className="vm-topbar-row">
           <div className="vm-topbar-title">
             <span className="vm-topbar-kicker">UCHINOKO STAMP MOBILE</span>
-            <span className="vm-topbar-name">うちのこスタンプ工房（スマホ版）</span>
+            <span className="vm-topbar-name">うちのこスタンプ工房</span>
           </div>
           <div className="vm-topbar-actions">
             <a className="vm-topbar-btn" href="/stamp-room" title="PC版を開く">
