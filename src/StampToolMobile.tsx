@@ -138,6 +138,7 @@ export default function StampToolMobile() {
   const cropLatestPointsRef = useRef<GesturePoint[]>([]);
   const cellCropOverridesRef = useRef<Record<number, CellCropOverride>>({});
   const manualCellSrcOverridesRef = useRef<Record<number, string>>({});
+  const eraseStrokeOverridesRef = useRef<Record<number, EraseStroke[]>>({});
   const splitJobRef = useRef(0);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -215,6 +216,24 @@ export default function StampToolMobile() {
     manualCellSrcOverridesRef.current = {};
   }
 
+  function appendEraseStrokeOverride(index: number, strokes: EraseStroke[]) {
+    if (!strokes.length) return;
+    eraseStrokeOverridesRef.current = {
+      ...eraseStrokeOverridesRef.current,
+      [index]: [...(eraseStrokeOverridesRef.current[index] ?? []), ...strokes],
+    };
+  }
+
+  function clearEraseStrokeOverride(index: number) {
+    const next = { ...eraseStrokeOverridesRef.current };
+    delete next[index];
+    eraseStrokeOverridesRef.current = next;
+  }
+
+  function clearEraseStrokeOverrides() {
+    eraseStrokeOverridesRef.current = {};
+  }
+
   async function handleFile(files: FileList | null) {
     if (!files || !files[0]) return;
     try {
@@ -226,6 +245,7 @@ export default function StampToolMobile() {
       setCellOffsets({});
       setCropOverrideState({});
       clearManualCellSrcOverrides();
+      clearEraseStrokeOverrides();
     } catch (err) {
       console.error(err);
       setSplitMsg("画像の読み込みに失敗しました。");
@@ -273,6 +293,13 @@ export default function StampToolMobile() {
         ...cell,
         src: await centerImageContent(cell.src),
       })),
+    );
+    const eraseOverrides = eraseStrokeOverridesRef.current;
+    nextCells = await Promise.all(
+      nextCells.map(async (cell, index) => {
+        const strokes = eraseOverrides[index];
+        return strokes?.length ? { ...cell, src: await eraseImageAtPoints(cell.src, strokes) } : cell;
+      }),
     );
     const manualOverrides = manualCellSrcOverridesRef.current;
     nextCells = nextCells.map((cell, index) =>
@@ -391,6 +418,7 @@ export default function StampToolMobile() {
   }
 
   function updateSelectedCropOverride(patch: Partial<CellCropOverride>) {
+    if (eraseBusyRef.current || eraseBusy || processingSplit) return;
     const current = cropOverrideFor(selectedIndex);
     applyCropOverride(selectedIndex, { ...current, ...patch });
   }
@@ -416,6 +444,7 @@ export default function StampToolMobile() {
     setCellOffsets({ ...cellOffsets, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } });
     const next = { ...cellCropOverridesRef.current };
     delete next[selectedIndex];
+    clearEraseStrokeOverride(selectedIndex);
     clearManualCellSrcOverride(selectedIndex);
     setCropOverrideState(next);
     void regenerateSplitCells(next, { message: "個別補正をリセットしています..." });
@@ -686,6 +715,7 @@ export default function StampToolMobile() {
 
         const nextSrc = await eraseImageAtPoints(source, strokes);
         eraseSourceRef.current = nextSrc;
+        appendEraseStrokeOverride(targetIndex, strokes);
         setManualCellSrcOverride(targetIndex, nextSrc);
         setSplitCells((cells) =>
           cells.map((cell, index) => (index === targetIndex ? { ...cell, src: nextSrc } : cell)),
@@ -746,6 +776,7 @@ export default function StampToolMobile() {
     setSelectedIndex(0);
     setCropOverrideState({});
     clearManualCellSrcOverrides();
+    clearEraseStrokeOverrides();
     setCellOffsets({});
   }
 
