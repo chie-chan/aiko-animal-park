@@ -316,10 +316,33 @@
   border-radius: 8px;
   pointer-events: none;
 }
+.vm-cut-cell {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid rgba(227, 110, 160, 0.55);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+  pointer-events: none;
+}
+.vm-cut-cell span {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(47, 27, 61, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 18px;
+  text-align: center;
+}
 .vm-cut-line {
   appearance: none;
   position: absolute;
-  z-index: 3;
+  z-index: 4;
   border: 0;
   padding: 0;
   background: transparent;

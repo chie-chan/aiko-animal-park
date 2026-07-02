@@ -312,6 +312,23 @@ export default function StampToolMobile() {
     },
     [horizontalCuts, gridSize, cutBounds],
   );
+  const cutCellRegions = useMemo(() => {
+    const bounds = cutBounds ?? { left: 0, right: 100, top: 0, bottom: 100 };
+    const xs = [bounds.left, ...verticalLinePositions, bounds.right];
+    const ys = [bounds.top, ...horizontalLinePositions, bounds.bottom];
+    const cells: Array<{ x: number; y: number; w: number; h: number }> = [];
+    for (let row = 0; row < gridSize; row += 1) {
+      for (let col = 0; col < gridSize; col += 1) {
+        cells.push({
+          x: xs[col],
+          y: ys[row],
+          w: xs[col + 1] - xs[col],
+          h: ys[row + 1] - ys[row],
+        });
+      }
+    }
+    return cells;
+  }, [cutBounds, verticalLinePositions, horizontalLinePositions, gridSize]);
   const canCopy =
     petKind !== null && (petKind !== "その他" || petKindOther.trim().length > 0);
 
@@ -1157,6 +1174,20 @@ export default function StampToolMobile() {
                       }}
                     />
                   )}
+                  {cutCellRegions.map((cell, index) => (
+                    <span
+                      key={`cut-cell-${index}`}
+                      className="vm-cut-cell"
+                      style={{
+                        left: `${cell.x}%`,
+                        top: `${cell.y}%`,
+                        width: `${cell.w}%`,
+                        height: `${cell.h}%`,
+                      }}
+                    >
+                      <span>{index + 1}</span>
+                    </span>
+                  ))}
                   {verticalLinePositions.map((pct, index) => (
                     <button
                       key={`cut-v-${index}`}
