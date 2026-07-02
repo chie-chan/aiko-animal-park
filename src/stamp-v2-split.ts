@@ -86,6 +86,145 @@ export interface CellOffset {
   scale?: number; // 1 = original fit size
 }
 
+/** シートの「列ごと/行ごとの中身の量」。カット線を余白（谷）に吸着させるために使う */
+export interface SheetProfiles {
+  col: number[];
+  row: number[];
+  w: number;
+  h: number;
+}
+
+/**
+ * profile（中身の量の列）から、targetCut% の近傍にある「余白の谷」の中心を探す。
+ * 谷がはっきりしない画像（写真など余白の無いシート）では null を返してスナップしない。
+ * cut% は [startPx, endPx] を 0-100 とする座標系。
+ */
+export function findValleyCut(
+  profile: number[],
+  startPx: number,
+  endPx: number,
+  targetCut: number,
+  halfWindowCutPct: number,
+): number | null {
+  const s = Math.max(0, Math.round(startPx));
+  const e = Math.min(profile.length - 1, Math.round(endPx));
+  const len = e - s;
+  if (len < 8) return null;
+  let domainSum = 0;
+  for (let i = s; i <= e; i += 1) domainSum += profile[i];
+  const domainAvg = domainSum / (len + 1);
+  if (domainAvg <= 0) return null;
+  const targetPx = s + (len * targetCut) / 100;
+  const half = Math.max(2, (len * halfWindowCutPct) / 100);
+  const lo = Math.max(s, Math.round(targetPx - half));
+  const hi = Math.min(e, Math.round(targetPx + half));
+  if (hi - lo < 3) return null;
+  let minV = Infinity;
+  for (let i = lo; i <= hi; i += 1) minV = Math.min(minV, profile[i]);
+  // 谷がはっきりしない（コマ間の余白が無い）画像ではスナップしない
+  if (minV > domainAvg * 0.3) return null;
+  // 谷底とほぼ同じ高さの「平ら」な区間の中心を谷の中心とみなす。
+  // 谷が探索窓より広い場合は窓の外側へも辿って本当の中心を取る（辿りは窓幅ぶんまで）
+  const eps = Math.max(0.5, domainAvg * 0.06);
+  const maxExtend = Math.round(half * 2);
+  let lo2 = lo;
+  let hi2 = hi;
+  while (lo2 - 1 >= s && lo - lo2 < maxExtend && profile[lo2 - 1] <= minV + eps) lo2 -= 1;
+  while (hi2 + 1 <= e && hi2 - hi < maxExtend && profile[hi2 + 1] <= minV + eps) hi2 += 1;
+  let sum = 0;
+  let cnt = 0;
+  for (let i = lo2; i <= hi2; i += 1) {
+    if (profile[i] <= minV + eps) {
+      sum += i;
+      cnt += 1;
+    }
+  }
+  if (!cnt) return null;
+  return clamp(((sum / cnt - s) / len) * 100, 4, 96);
+}
+
+/**
+ * シート画像から列/行の中身プロファイルを作る（520px以下に縮小して解析）。
+ * 白背景・透過背景の両対応（四隅から背景色を推定し、背景でないピクセルを中身と数える）。
+ */
+export async function buildSheetProfiles(src: string): Promise<SheetProfiles | null> {
+  try {
+    const image = await loadImage(src);
+    const sourceW = image.naturalWidth || image.width;
+    const sourceH = image.naturalHeight || image.height;
+    if (!sourceW || !sourceH) return null;
+    const scale = Math.min(1, 520 / Math.max(sourceW, sourceH));
+    const w = Math.max(1, Math.round(sourceW * scale));
+    const h = Math.max(1, Math.round(sourceH * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(image, 0, 0, w, h);
+    let imageData: ImageData;
+    try {
+      imageData = ctx.getImageData(0, 0, w, h);
+    } catch {
+      return null;
+    }
+    const data = imageData.data;
+    const total = w * h;
+
+    let transparentPixels = 0;
+    for (let i = 0; i < total; i += 1) {
+      if (data[i * 4 + 3] <= 12) transparentPixels += 1;
+    }
+    const hasTransparentBackground = transparentPixels > total * 0.02;
+
+    // 四隅から背景色を推定
+    const cornerSize = Math.max(2, Math.round(Math.min(w, h) * 0.025));
+    let bgR = 0;
+    let bgG = 0;
+    let bgB = 0;
+    let bgCount = 0;
+    const addBgSample = (x0: number, y0: number) => {
+      for (let y = y0; y < Math.min(h, y0 + cornerSize); y += 1) {
+        for (let x = x0; x < Math.min(w, x0 + cornerSize); x += 1) {
+          const o = (y * w + x) * 4;
+          if (data[o + 3] <= 12) continue;
+          bgR += data[o];
+          bgG += data[o + 1];
+          bgB += data[o + 2];
+          bgCount += 1;
+        }
+      }
+    };
+    addBgSample(0, 0);
+    addBgSample(Math.max(0, w - cornerSize), 0);
+    addBgSample(0, Math.max(0, h - cornerSize));
+    addBgSample(Math.max(0, w - cornerSize), Math.max(0, h - cornerSize));
+    const bg = bgCount
+      ? { r: bgR / bgCount, g: bgG / bgCount, b: bgB / bgCount }
+      : { r: 255, g: 255, b: 255 };
+
+    const col = new Array<number>(w).fill(0);
+    const row = new Array<number>(h).fill(0);
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const o = (y * w + x) * 4;
+        const a = data[o + 3];
+        if (a <= 12) continue;
+        const dr = data[o] - bg.r;
+        const dg = data[o + 1] - bg.g;
+        const db = data[o + 2] - bg.b;
+        const isContent = hasTransparentBackground || Math.sqrt(dr * dr + dg * dg + db * db) > 28;
+        if (!isContent) continue;
+        col[x] += 1;
+        row[y] += 1;
+      }
+    }
+    return { col, row, w, h };
+  } catch {
+    return null;
+  }
+}
+
 export interface CellCropOverride {
   shiftX?: number;
   shiftY?: number;
@@ -102,8 +241,42 @@ export interface CropBounds {
 }
 
 /**
+ * 出力キャンバスに軽いアンシャープマスクをかける（アップスケール時の眠さ対策）。
+ * KMベイツ実績の「LANCZOS拡大＋UnsharpMask」のブラウザ版。透過(alpha)は触らない。
+ */
+function unsharpCanvas(canvas: HTMLCanvasElement, radiusPx = 1, amount = 0.6) {
+  const w = canvas.width;
+  const h = canvas.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const blurCanvas = document.createElement("canvas");
+  blurCanvas.width = w;
+  blurCanvas.height = h;
+  const bctx = blurCanvas.getContext("2d");
+  if (!bctx) return;
+  bctx.filter = `blur(${radiusPx}px)`;
+  bctx.drawImage(canvas, 0, 0);
+  try {
+    const srcData = ctx.getImageData(0, 0, w, h);
+    const blurData = bctx.getImageData(0, 0, w, h);
+    const s = srcData.data;
+    const b = blurData.data;
+    for (let i = 0; i < s.length; i += 4) {
+      if (s[i + 3] === 0) continue; // 透明部はそのまま
+      s[i] = clamp(s[i] + (s[i] - b[i]) * amount, 0, 255);
+      s[i + 1] = clamp(s[i + 1] + (s[i + 1] - b[i + 1]) * amount, 0, 255);
+      s[i + 2] = clamp(s[i + 2] + (s[i + 2] - b[i + 2]) * amount, 0, 255);
+    }
+    ctx.putImageData(srcData, 0, 0);
+  } catch {
+    // getImageData不可(CORS等)なら未シャープのまま
+  }
+}
+
+/**
  * セル画像を指定サイズに収めて透過PNGとして書き出す（中央寄せ、余白は透過）。
  * offset を渡すと、中央位置から指定% だけずらし、必要なら拡大して描画する。
+ * 高画質化: 縮小は段階的リサンプル、拡大は高品質補間＋軽いアンシャープで線の甘さを防ぐ。
  */
 export async function renderCellToSize(
   src: string,
@@ -119,6 +292,8 @@ export async function renderCellToSize(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas context unavailable");
   ctx.clearRect(0, 0, targetW, targetH);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
   const maxMargin = Math.max(0, Math.floor(Math.min(targetW, targetH) / 2) - 1);
   const safeMargin = clamp(marginPx, 0, maxMargin);
@@ -142,7 +317,31 @@ export async function renderCellToSize(
   const offsetY = ((offset?.dy ?? 0) / 100) * innerH;
   const x = safeMargin + (innerW - scaledW) / 2 + offsetX;
   const y = safeMargin + (innerH - scaledH) / 2 + offsetY;
-  ctx.drawImage(img, x, y, scaledW, scaledH);
+
+  const drawScale = scaledW / Math.max(1, img.width);
+  let source: CanvasImageSource = img;
+  let sourceW = img.width;
+  let sourceH = img.height;
+  // 大きく縮小する時は 1/2 ずつ段階的に縮めてジャギー/モアレを防ぐ
+  while (sourceW * 0.5 > scaledW && sourceH * 0.5 > scaledH) {
+    const stepCanvas = document.createElement("canvas");
+    stepCanvas.width = Math.max(1, Math.round(sourceW * 0.5));
+    stepCanvas.height = Math.max(1, Math.round(sourceH * 0.5));
+    const stepCtx = stepCanvas.getContext("2d");
+    if (!stepCtx) break;
+    stepCtx.imageSmoothingEnabled = true;
+    stepCtx.imageSmoothingQuality = "high";
+    stepCtx.drawImage(source, 0, 0, stepCanvas.width, stepCanvas.height);
+    source = stepCanvas;
+    sourceW = stepCanvas.width;
+    sourceH = stepCanvas.height;
+  }
+  ctx.drawImage(source, x, y, scaledW, scaledH);
+
+  // 拡大した時だけ軽くシャープをかけて線の眠さを戻す（縮小時は元々シャープ）
+  if (drawScale > 1.05) {
+    unsharpCanvas(canvas, 1, Math.min(0.9, 0.5 + (drawScale - 1) * 0.4));
+  }
 
   return canvasToBlob(canvas);
 }
@@ -550,12 +749,8 @@ export async function splitSheetImage(
   const trimX = image.width * (trimGutter / 100) * 0.5;
   const trimY = image.height * (trimGutter / 100) * 0.5;
 
-  function fitCropRange(start: number, end: number, max: number): [number, number] {
-    const requestedSize = Math.max(1, end - start);
-    const size = Math.min(requestedSize, max);
-    const safeStart = clamp(start, 0, Math.max(0, max - size));
-    return [safeStart, safeStart + size];
-  }
+  // preserveCropSize時: 窓が画像外にはみ出しても位置を押し戻さない（はみ出し分は透明のまま）。
+  // 押し戻すと端の行/列が同じ領域を切り出して複製されるため。
 
   const cells: SourceImage[] = [];
   const lastCol = gridCols - 1;
@@ -583,13 +778,13 @@ export async function splitSheetImage(
       const rawEx = baseSx + baseSw + shiftXPx + padXPx - zoomXPx;
       const rawEy = baseSy + baseSh + shiftYPx + padYPx - zoomYPx;
       const [sx, ex] = preserveCropSize
-        ? fitCropRange(rawSx, rawEx, image.width)
+        ? [rawSx, Math.max(rawSx + 1, rawEx)]
         : [
             clamp(rawSx, 0, Math.max(0, image.width - 1)),
             clamp(rawEx, clamp(rawSx, 0, Math.max(0, image.width - 1)) + 1, image.width),
           ];
       const [sy, ey] = preserveCropSize
-        ? fitCropRange(rawSy, rawEy, image.height)
+        ? [rawSy, Math.max(rawSy + 1, rawEy)]
         : [
             clamp(rawSy, 0, Math.max(0, image.height - 1)),
             clamp(rawEy, clamp(rawSy, 0, Math.max(0, image.height - 1)) + 1, image.height),
@@ -602,7 +797,26 @@ export async function splitSheetImage(
       canvas.height = Math.max(1, Math.round(sh));
       const ctx = canvas.getContext("2d");
       if (!ctx) continue;
-      ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      // 窓と画像の交差部分だけを、窓内の正しい位置に描く（はみ出し分は透明のまま）
+      const isx = clamp(sx, 0, image.width);
+      const iex = clamp(ex, 0, image.width);
+      const isy = clamp(sy, 0, image.height);
+      const iey = clamp(ey, 0, image.height);
+      if (iex > isx && iey > isy) {
+        const scaleX = canvas.width / sw;
+        const scaleY = canvas.height / sh;
+        ctx.drawImage(
+          image,
+          isx,
+          isy,
+          iex - isx,
+          iey - isy,
+          (isx - sx) * scaleX,
+          (isy - sy) * scaleY,
+          (iex - isx) * scaleX,
+          (iey - isy) * scaleY,
+        );
+      }
       cells.push({
         id: `sheet-${row}-${col}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         name: `sheet_${String(cells.length + 1).padStart(2, "0")}.png`,

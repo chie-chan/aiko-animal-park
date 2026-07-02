@@ -159,6 +159,9 @@ export default function StampToolV2({ mode = "full" }: StampToolV2Props) {
   const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
   const [intakeMode, setIntakeMode] = useState<IntakeMode>(null);
   const [hasAutoCentered, setHasAutoCentered] = useState<boolean>(false);
+  // ⚡おまかせ/シート合算 完了→自動で確認画面へ進めるフラグ
+  // fresh=新規セット（選択/オフセットをリセット） append=追加（既存コマの調整を保持）
+  const [autoReviewPending, setAutoReviewPending] = useState<null | "fresh" | "append">(null);
 
   useEffect(() => {
     if (splitCells.length === 0) {
@@ -330,6 +333,25 @@ export default function StampToolV2({ mode = "full" }: StampToolV2Props) {
     setStep(target);
   }
 
+  // ⚡おまかせ/シート合算の完了後: セルstateが反映されてから確認画面（画像配置）へ直行。
+  // 中央寄せは Step2Splitter 側で「そのシートの新コマだけ」に済ませてあるため、
+  // ここでは全コマの再センターをしない＝④で調整した既存コマの位置が消えない。
+  useEffect(() => {
+    if (!autoReviewPending || splitCells.length === 0) return;
+    const mode = autoReviewPending;
+    setAutoReviewPending(null);
+    if (mode === "fresh") {
+      // 新規セット: 前のセットの選択・手動オフセットを引きずらない
+      setSelectedCellIndex(0);
+      setCellOffsets({});
+      setMainImageId("");
+      setTabImageId("");
+    }
+    setHasAutoCentered(true);
+    setStep(4);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoReviewPending, splitCells]);
+
   function handleNext() {
     if (nextStep) void goToStep(nextStep);
   }
@@ -353,7 +375,7 @@ export default function StampToolV2({ mode = "full" }: StampToolV2Props) {
     setStep((Math.max(1, step - 1) as StepId));
   }
 
-  function savePlacementDraft(source: "manual" | "return-background") {
+  function savePlacementDraft(source: "manual" | "return-background" | "return-import-append") {
     setPlacementSavedAt(Date.now());
     trackStampEvent("placement_save", {
       source,
@@ -366,6 +388,12 @@ export default function StampToolV2({ mode = "full" }: StampToolV2Props) {
   function savePlacementAndReturnToBackground() {
     savePlacementDraft("return-background");
     setStep(3);
+  }
+
+  // ④の配置を保存して①へ（シート追加=合算のため）。追加後は自動で④に戻ってくる
+  function savePlacementAndAddImages() {
+    savePlacementDraft("return-import-append");
+    setStep(1);
   }
 
   function openDesignRoomWithGuide() {
@@ -503,6 +531,7 @@ export default function StampToolV2({ mode = "full" }: StampToolV2Props) {
             onChangeGridRows={(next) => handleSplitGridChange("rows", next)}
             onImportModeChange={handleImportModeChange}
             onImportComplete={handleImportComplete}
+            onAutoPilotComplete={(mode) => setAutoReviewPending(mode)}
           />
         )}
 
@@ -616,6 +645,15 @@ export default function StampToolV2({ mode = "full" }: StampToolV2Props) {
             onClick={savePlacementAndReturnToBackground}
           >
             保存して③へ戻る
+          </button>
+        )}
+        {(step === 4 || step === 5) && splitCells.length < 40 && (
+          <button
+            type="button"
+            className="v2-btn-save"
+            onClick={savePlacementAndAddImages}
+          >
+            保存して画像追加①へ
           </button>
         )}
         <p className="v2-bottom-msg">

@@ -1718,6 +1718,88 @@
   min-height: 170px;
   padding: 28px 18px;
 }
+/* ⚡おまかせトグル（チェックボックスは小さく上品に） */
+.v2-autopilot-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--v2-ink);
+  cursor: pointer;
+  user-select: none;
+}
+.v2-autopilot-toggle input[type="checkbox"] {
+  appearance: auto;
+  width: 15px;
+  height: 15px;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--v2-pink);
+  cursor: pointer;
+}
+/* 3×3/4×4/5×5 クイック切替 */
+.v2-quick-grid {
+  display: inline-flex;
+  gap: 4px;
+}
+.v2-quick-grid button {
+  appearance: none;
+  border: 1.5px solid var(--v2-line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--v2-muted);
+  cursor: pointer;
+}
+.v2-quick-grid button.is-active {
+  border-color: var(--v2-pink);
+  color: var(--v2-pink);
+  background: rgba(247, 168, 200, 0.15);
+}
+/* 分割数の行（シートから作る内） */
+.v2-grid-size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.v2-grid-size-row > span {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--v2-muted);
+}
+/* 取り込み済みパネル内の「次のシートを追加」(目立つ全幅ボタン) */
+.v2-append-btn-big {
+  display: block;
+  width: 100%;
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border: 2px dashed var(--v2-pink);
+  border-radius: 12px;
+  background: rgba(247, 168, 200, 0.12);
+  color: var(--v2-pink);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.v2-append-btn-big:hover {
+  background: rgba(247, 168, 200, 0.22);
+}
+.v2-append-btn-big:disabled {
+  opacity: 0.5;
+}
+.v2-append-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--v2-muted);
+  font-weight: 700;
+}
 .v2-intake-option .v2-batch-drop-zone {
   margin-top: 0;
 }

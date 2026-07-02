@@ -2,11 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type CellCropOverride,
   type GridSize,
+  type SheetProfiles,
   type SourceImage,
+  buildSheetProfiles,
+  centerImageContent,
   clamp,
   defaultCuts,
   eraseImageAtPoints,
   type EraseStroke,
+  findValleyCut,
   linePosition,
   makeImageTransparent,
   pickImageColor,
@@ -41,6 +45,9 @@ interface Props {
   onChangeGridRows?: (g: GridSize) => void;
   onImportModeChange?: (mode: "sheet" | "batch" | null) => void;
   onImportComplete?: (mode: "sheet" | "batch") => void;
+  /** おまかせ処理/シート合算の完了時（親はそのまま確認画面=画像配置へ進める）
+   *  fresh=新規セット / append=既存セットへの追加（既存コマの調整は保持する） */
+  onAutoPilotComplete?: (mode: "fresh" | "append") => void;
 }
 
 type DragAxis = "vertical" | "horizontal";
@@ -95,6 +102,7 @@ export default function Step2Splitter(props: Props) {
     onChangeGridRows,
     onImportModeChange,
     onImportComplete,
+    onAutoPilotComplete,
   } = props;
 
   function renderGridDimensionSlider(
@@ -179,9 +187,14 @@ export default function Step2Splitter(props: Props) {
   const cellCount = gridCols * gridRows;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchFileInputRef = useRef<HTMLInputElement>(null);
+  const appendFileInputRef = useRef<HTMLInputElement>(null);
+  // ⚡おまかせ: シート取り込み時に 分割→透過→中央寄せ→確認画面 まで自動で進む
+  const [autoPilot, setAutoPilot] = useState(true);
   const liveGridRef = useRef<HTMLDivElement>(null);
   const adjustPreviewRef = useRef<HTMLDivElement>(null);
   const dragBoundsRef = useRef<HTMLElement | null>(null);
+  // シートの列/行プロファイル（カット線を余白の谷へ自動フィット/吸着させる用）
+  const sheetProfilesRef = useRef<SheetProfiles | null>(null);
   const splitCellsRef = useRef<SourceImage[]>(splitCells);
   const batchEditIndexRef = useRef<number | null>(null);
   const eraseSourceRef = useRef<string | null>(null);
@@ -447,6 +460,8 @@ export default function Step2Splitter(props: Props) {
     setBgTransparent(false);
     setSheetSrc(url);
     setMessage("");
+    // カット線をコマ間の余白（谷）へ自動フィット（谷が無いシートは等間隔のまま）
+    void autoFitCutsForSheet(url);
   }
 
   // 透過トグルの切替（元画像から作り直す）
@@ -663,14 +678,16 @@ export default function Step2Splitter(props: Props) {
   async function regenerateCells(
     src: string,
     overrides: Record<number, CellCropOverride> = cellCropOverrides,
+    // setVerticalCuts直後はまだprops値が古いので、スナップ/自動フィット確定値を直接渡せるようにする
+    cutsOverride?: { vertical?: number[]; horizontal?: number[] },
   ) {
     try {
       const cells = await splitSheetImage(
         src,
         OUTER_PADDING,
         trimGutter,
-        verticalCuts,
-        horizontalCuts,
+        cutsOverride?.vertical ?? verticalCuts,
+        cutsOverride?.horizontal ?? horizontalCuts,
         gridCols,
         gridRows,
         overrides,
@@ -730,6 +747,11 @@ export default function Step2Splitter(props: Props) {
   async function handleFile(files: FileList | null) {
     if (!files || !files[0]) return;
     const url = await readFileAsDataUrl(files[0]);
+    if (autoPilot && phase === "import") {
+      // ⚡おまかせ: 分割→透過まで済ませて確認画面へ直行
+      await runAutoPilotFromSheet(url);
+      return;
+    }
     onImportModeChange?.("sheet");
     await applyUploadedSrc(url);
     onImportComplete?.("sheet");
@@ -785,6 +807,99 @@ export default function Step2Splitter(props: Props) {
       setBatchProgress("");
     }
     if (imported) onImportComplete?.("batch");
+  }
+
+  // ── おまかせ処理＆シート合算 ─────────────────────────
+  // シートを「自動フィット分割→白背景透過」まで一気に処理してセル配列を返す
+  async function splitAndCleanSheet(url: string, startIndex: number): Promise<SourceImage[]> {
+    const profiles = await buildSheetProfiles(url);
+    sheetProfilesRef.current = profiles;
+    const fitted = profiles
+      ? fitCutsToValleys(profiles, gridCols, gridRows)
+      : { vertical: defaultCuts(gridCols), horizontal: defaultCuts(gridRows) };
+    setVerticalCuts(fitted.vertical);
+    setHorizontalCuts(fitted.horizontal);
+    const cells = await splitSheetImage(
+      url,
+      OUTER_PADDING,
+      trimGutter,
+      fitted.vertical,
+      fitted.horizontal,
+      gridCols,
+      gridRows,
+      {},
+    );
+    setBatchProgress("背景を透過しています…");
+    const cleaned = await Promise.all(
+      cells.map(async (cell, i) => {
+        const transparent = await makeImageTransparent(cell.src);
+        // このシート分だけ中央寄せまで済ませる（既存コマの調整に触れないため親では再センターしない）
+        const centered = await centerImageContent(transparent);
+        return {
+          ...cell,
+          id: `auto-${startIndex + i}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: `stamp_${String(startIndex + i + 1).padStart(2, "0")}.png`,
+          src: centered,
+        };
+      }),
+    );
+    return cleaned;
+  }
+
+  // ⚡おまかせ: シート1枚を分割→透過して、そのまま確認画面（画像配置）へ
+  async function runAutoPilotFromSheet(url: string) {
+    setProcessing(true);
+    setBatchProgress("シートを自動分割しています…");
+    setMessage("");
+    try {
+      const cells = await splitAndCleanSheet(url, 0);
+      clearBgUndoStack();
+      setSheetSrc(null);
+      setRawSrc(null);
+      setCellCropOverrides({});
+      splitCellsRef.current = cells;
+      setSplitCells(cells);
+      onImportModeChange?.("batch");
+      setMessage(`${cells.length}枚に分割して透過しました。`);
+      trackStampEvent("import_autopilot", { cellCount: cells.length, cols: gridCols, rows: gridRows });
+      onAutoPilotComplete?.("fresh");
+    } catch (err) {
+      console.error(err);
+      setMessage("おまかせ処理に失敗しました。画像を確認してください。");
+    } finally {
+      setProcessing(false);
+      setBatchProgress("");
+    }
+  }
+
+  // ➕シート合算: 今あるセルの後ろに、新しいシートの分割結果を追記（最大40枚）
+  async function handleAppendSheetFiles(files: FileList | null) {
+    if (!files || !files[0] || processing) return;
+    const url = await readFileAsDataUrl(files[0]);
+    const base = splitCellsRef.current.length ? splitCellsRef.current : splitCells;
+    setProcessing(true);
+    setBatchProgress("追加シートを分割しています…");
+    try {
+      const added = await splitAndCleanSheet(url, base.length);
+      const room = MAX_BATCH_IMAGES - base.length;
+      const combined = [...base, ...added.slice(0, Math.max(0, room))];
+      splitCellsRef.current = combined;
+      setSplitCells(combined);
+      setSheetSrc(null);
+      setRawSrc(null);
+      onImportModeChange?.("batch");
+      setMessage(
+        `${base.length}枚 → ${combined.length}枚に追加しました${added.length > room ? `（上限${MAX_BATCH_IMAGES}枚のため${added.length - room}枚は未追加）` : ""}。`,
+      );
+      trackStampEvent("sheet_append", { total: combined.length });
+      onAutoPilotComplete?.("append");
+    } catch (err) {
+      console.error(err);
+      setMessage("シートの追加に失敗しました。画像を確認してください。");
+    } finally {
+      setProcessing(false);
+      setBatchProgress("");
+    }
   }
 
   async function runBatchTransparency() {
@@ -857,6 +972,62 @@ export default function Step2Splitter(props: Props) {
     }
   }
 
+  // ── カット線の自動フィット（余白の谷に合わせる） ──────────
+  function fitCutsToValleys(profiles: SheetProfiles, cols: GridSize, rows: GridSize) {
+    const halfWindowFor = (n: GridSize) => (100 / n) * 0.35;
+    return {
+      vertical: defaultCuts(cols).map(
+        (cut) => findValleyCut(profiles.col, 0, profiles.w - 1, cut, halfWindowFor(cols)) ?? cut,
+      ),
+      horizontal: defaultCuts(rows).map(
+        (cut) => findValleyCut(profiles.row, 0, profiles.h - 1, cut, halfWindowFor(rows)) ?? cut,
+      ),
+    };
+  }
+
+  async function autoFitCutsForSheet(url: string, cols: GridSize = gridCols, rows: GridSize = gridRows) {
+    const profiles = await buildSheetProfiles(url);
+    sheetProfilesRef.current = profiles;
+    if (!profiles) return;
+    const fitted = fitCutsToValleys(profiles, cols, rows);
+    setVerticalCuts(fitted.vertical);
+    setHorizontalCuts(fitted.horizontal);
+    void regenerateCells(url, cellCropOverrides, fitted);
+  }
+
+  // ステップ移動でこのコンポーネントは作り直されるため、スナップ用プロファイルをシートから再構築する
+  // （自動フィットはしない＝手で調整した線を勝手に動かさない）
+  useEffect(() => {
+    let cancelled = false;
+    if (!sheetSrc) {
+      sheetProfilesRef.current = null;
+      return;
+    }
+    if (sheetProfilesRef.current) return;
+    void buildSheetProfiles(sheetSrc).then((profiles) => {
+      if (!cancelled) sheetProfilesRef.current = profiles;
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetSrc]);
+
+  // グリッド数変更時も（親が等間隔にリセットした後で）谷に再フィット
+  const prevGridRef = useRef<{ cols: GridSize; rows: GridSize }>({ cols: gridCols, rows: gridRows });
+  useEffect(() => {
+    const prev = prevGridRef.current;
+    if (prev.cols === gridCols && prev.rows === gridRows) return;
+    prevGridRef.current = { cols: gridCols, rows: gridRows };
+    if (sheetSrc && sheetProfilesRef.current && phase !== "background") {
+      const fitted = fitCutsToValleys(sheetProfilesRef.current, gridCols, gridRows);
+      setVerticalCuts(fitted.vertical);
+      setHorizontalCuts(fitted.horizontal);
+      void regenerateCells(sheetSrc, cellCropOverrides, fitted);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gridCols, gridRows, sheetSrc, phase]);
+
   // ── ドラッグ ──────────────────────────────────────────
   function updateCut(axis: DragAxis, index: number, value: number) {
     const cuts = axis === "vertical" ? [...verticalCuts] : [...horizontalCuts];
@@ -885,8 +1056,34 @@ export default function Step2Splitter(props: Props) {
   }
   function stopDrag() {
     if (drag && sheetSrc) {
+      // 指を離した位置の近く(±3.5%)に「コマ間の余白の谷」があれば磁石のように吸着
+      let cutsOverride: { vertical?: number[]; horizontal?: number[] } | undefined;
+      const profiles = sheetProfilesRef.current;
+      if (profiles) {
+        const isV = drag.axis === "vertical";
+        const cuts = isV ? [...verticalCuts] : [...horizontalCuts];
+        const current = cuts[drag.index];
+        const snapped = findValleyCut(
+          isV ? profiles.col : profiles.row,
+          0,
+          (isV ? profiles.w : profiles.h) - 1,
+          current,
+          3.5,
+        );
+        if (snapped != null && Math.abs(snapped - current) > 0.05) {
+          cuts[drag.index] = snapped;
+          const safe = safeCuts(cuts, isV ? gridCols : gridRows);
+          if (isV) {
+            setVerticalCuts(safe);
+            cutsOverride = { vertical: safe };
+          } else {
+            setHorizontalCuts(safe);
+            cutsOverride = { horizontal: safe };
+          }
+        }
+      }
       // ドラッグ確定時にPNG再生成
-      regenerateCells(sheetSrc);
+      regenerateCells(sheetSrc, cellCropOverrides, cutsOverride);
     }
     dragBoundsRef.current = null;
     setDrag(null);
@@ -1319,7 +1516,24 @@ export default function Step2Splitter(props: Props) {
             <section className="v2-intake-option">
               <div className="v2-intake-option-label">
                 <span>シートから作る</span>
-                <small>{gridLabel} に分割</small>
+              </div>
+              <div className="v2-grid-size-row">
+                <span>分割数</span>
+                <div className="v2-quick-grid" role="group" aria-label="分割数">
+                  {([3, 4, 5] as GridSize[]).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={gridCols === n && gridRows === n ? "is-active" : ""}
+                      onClick={() => {
+                        onChangeGridCols?.(n);
+                        onChangeGridRows?.(n);
+                      }}
+                    >
+                      {n}×{n}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
                 type="button"
@@ -1327,11 +1541,20 @@ export default function Step2Splitter(props: Props) {
                 onClick={() => fileInputRef.current?.click()}
                 onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files); }}
                 onDragOver={(e) => e.preventDefault()}
+                disabled={processing}
               >
                 <span style={{ fontSize: 32 }}>📥</span>
                 <strong>シート画像をアップロード</strong>
                 <span>PNG画像がおすすめ</span>
               </button>
+              <label className="v2-autopilot-toggle">
+                <input
+                  type="checkbox"
+                  checked={autoPilot}
+                  onChange={(e) => setAutoPilot(e.target.checked)}
+                />
+                <span>⚡おまかせ（分割→透過→中央寄せまで自動で確認画面へ）</span>
+              </label>
             </section>
 
             <section className="v2-intake-option">
@@ -1357,7 +1580,7 @@ export default function Step2Splitter(props: Props) {
           {(batchProgress || (!sheetSrc && splitCells.length > 0)) && (
             <div className="v2-batch-result">
               <div className="v2-batch-result-head">
-                <strong>{batchProgress || `${splitCells.length}枚を取り込み済み`}</strong>
+                <strong>{batchProgress || `${splitCells.length}枚を取り込み済み（最大${MAX_BATCH_IMAGES}枚）`}</strong>
                 {splitCells.length > 0 && (
                   <button
                     type="button"
@@ -1371,6 +1594,21 @@ export default function Step2Splitter(props: Props) {
                   </button>
                 )}
               </div>
+              {splitCells.length > 0 && splitCells.length < MAX_BATCH_IMAGES && (
+                <>
+                  <button
+                    type="button"
+                    className="v2-append-btn-big"
+                    disabled={processing}
+                    onClick={() => appendFileInputRef.current?.click()}
+                  >
+                    ➕ 次のシートを追加（{gridLabel}で分割して合算 → 最大{MAX_BATCH_IMAGES}枚）
+                  </button>
+                  <p className="v2-append-hint">
+                    違う分割数のシートを足す時は、左上の「分割数」を切り替えてから追加してください。
+                  </p>
+                </>
+              )}
               {splitCells.length > 0 && (
                 <div className="v2-batch-preview-grid">
                   {splitCells.slice(0, 40).map((cell, index) => (
@@ -1399,6 +1637,13 @@ export default function Step2Splitter(props: Props) {
             multiple
             hidden
             onChange={(e) => void handleBatchFiles(e.target.files)}
+          />
+          <input
+            ref={appendFileInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => void handleAppendSheetFiles(e.target.files)}
           />
           {message && (
             <p style={{ fontSize: 12, color: message.includes("失敗") ? "#c66" : "var(--v2-pink)", margin: "10px 0 0", textAlign: "center", fontWeight: 800 }}>

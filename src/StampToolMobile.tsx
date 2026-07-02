@@ -14,12 +14,14 @@ import {
   type CropBounds,
   type EraseStroke,
   type GridSize,
+  type SheetProfiles,
   type SourceImage,
   centerDominantImageContent,
   centerImageContent,
   clamp,
   defaultCuts,
   eraseImageAtPoints,
+  findValleyCut,
   loadImage,
   makeImageTransparent,
   readFileAsDataUrl,
@@ -76,7 +78,9 @@ type CropGesture = {
   changed: boolean;
 };
 
-type ResultCutDrag = {
+// PC版と同じ「シート画像の上のピンク線を1本ずつドラッグ」する時の状態。
+// 絵は一切動かさず、線だけ動かす（コマもリサイズしない）
+type SheetCutDrag = {
   axis: "vertical" | "horizontal";
   pointerId: number;
   index: number;
@@ -84,8 +88,7 @@ type ResultCutDrag = {
   startY: number;
   width: number;
   height: number;
-  startCuts: number[];
-  latestCuts: number[];
+  startCut: number;
   moved: boolean;
 };
 
@@ -93,9 +96,10 @@ type CutLineEstimate = {
   vertical: number[];
   horizontal: number[];
   bounds: CropBounds | null;
+  profiles: SheetProfiles | null;
 };
 
-// この距離(px)未満の指移動は「タップ」とみなし、カット線を動かさず下のセル選択に回す
+// この距離(px)未満の指移動は「タップ」とみなし、カット線を動かさない（指ブレ対策）
 const RESULT_CUT_DRAG_THRESHOLD_PX = 6;
 
 const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
@@ -129,7 +133,7 @@ function bgClass(bg: MobileBgPreview): string {
 
 async function estimateContentCutLines(src: string, size: GridSize): Promise<CutLineEstimate> {
   const fallback = defaultCuts(size);
-  const fallbackEstimate = { vertical: fallback, horizontal: fallback, bounds: null };
+  const fallbackEstimate: CutLineEstimate = { vertical: fallback, horizontal: fallback, bounds: null, profiles: null };
   try {
     const image = await loadImage(src);
     const sourceW = image.naturalWidth || image.width;
@@ -185,6 +189,9 @@ async function estimateContentCutLines(src: string, size: GridSize): Promise<Cut
     let minY = h;
     let maxY = -1;
     let contentPixels = 0;
+    // 列/行ごとの中身の量（カット線を余白の谷に吸着させるためのプロファイル）
+    const colProfile = new Array<number>(w).fill(0);
+    const rowProfile = new Array<number>(h).fill(0);
     for (let y = 0; y < h; y += 1) {
       for (let x = 0; x < w; x += 1) {
         const o = (y * w + x) * 4;
@@ -200,6 +207,8 @@ async function estimateContentCutLines(src: string, size: GridSize): Promise<Cut
         maxX = Math.max(maxX, x);
         minY = Math.min(minY, y);
         maxY = Math.max(maxY, y);
+        colProfile[x] += 1;
+        rowProfile[y] += 1;
         contentPixels += 1;
       }
     }
@@ -222,10 +231,24 @@ async function estimateContentCutLines(src: string, size: GridSize): Promise<Cut
     const contentH = bottom - top;
     if (contentW > 96 && contentH > 96) return fallbackEstimate;
 
+    // 初期カット線を等間隔でなく「コマ間の余白の谷」に合わせる（PC版に無い自動フィット）
+    const halfWindow = (100 / size) * 0.35;
+    const leftPx = (left / 100) * w;
+    const rightPx = (right / 100) * w;
+    const topPx = (top / 100) * h;
+    const bottomPx = (bottom / 100) * h;
+    const vertical = fallback.map(
+      (cut) => findValleyCut(colProfile, leftPx, rightPx, cut, halfWindow) ?? cut,
+    );
+    const horizontal = fallback.map(
+      (cut) => findValleyCut(rowProfile, topPx, bottomPx, cut, halfWindow) ?? cut,
+    );
+
     return {
-      vertical: fallback,
-      horizontal: fallback,
+      vertical,
+      horizontal,
       bounds: { left, right, top, bottom },
+      profiles: { col: colProfile, row: rowProfile, w, h },
     };
   } catch (err) {
     console.warn("Failed to estimate mobile stamp cut lines", err);
@@ -259,7 +282,6 @@ export default function StampToolMobile() {
   const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(4));
   const [cutBounds, setCutBounds] = useState<CropBounds | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const resultGridRef = useRef<HTMLDivElement>(null);
   const editPreviewRef = useRef<HTMLDivElement>(null);
   const eraseBusyRef = useRef(false);
   const eraseQueueRef = useRef<EraseStroke[]>([]);
@@ -269,7 +291,9 @@ export default function StampToolMobile() {
   const eraserPointerIdRef = useRef<number | null>(null);
   const cropGestureRef = useRef<CropGesture | null>(null);
   const cropPointersRef = useRef<Map<number, GesturePoint>>(new Map());
-  const resultCutDragRef = useRef<ResultCutDrag | null>(null);
+  const sheetCutDragRef = useRef<SheetCutDrag | null>(null);
+  const sheetCutterRef = useRef<HTMLDivElement>(null);
+  const editPanelRef = useRef<HTMLElement>(null);
   // ピンチ/パンのプレビュー更新を1フレーム1回に間引く（毎pointermoveのsetStateを避けてなめらかに）
   const cropRafRef = useRef<number | null>(null);
   const cropLatestPointsRef = useRef<GesturePoint[]>([]);
@@ -279,10 +303,14 @@ export default function StampToolMobile() {
   const verticalCutsRef = useRef<number[]>(defaultCuts(4));
   const horizontalCutsRef = useRef<number[]>(defaultCuts(4));
   const cutBoundsRef = useRef<CropBounds | null>(null);
+  const sheetProfilesRef = useRef<SheetProfiles | null>(null);
   const splitJobRef = useRef(0);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [cellOffsets, setCellOffsets] = useState<Record<string, CellOffset>>({});
+  // 合算ストック: 確定済みシートのコマ（複数シートで最大40個まで貯める）
+  const [stockCells, setStockCells] = useState<SourceImage[]>([]);
+  const [stockOffsets, setStockOffsets] = useState<Record<string, CellOffset>>({});
   const [eraserEnabled, setEraserEnabled] = useState(false);
   const [eraseBusy, setEraseBusy] = useState(false);
   const [erasing, setErasing] = useState(false);
@@ -290,7 +318,7 @@ export default function StampToolMobile() {
   const [centerBusy, setCenterBusy] = useState(false);
   const [cropGesturing, setCropGesturing] = useState(false);
   const [gesturePreviewTransform, setGesturePreviewTransform] = useState<string | undefined>();
-  const [resultCutDragging, setResultCutDragging] = useState<{ axis: "vertical" | "horizontal"; index: number } | null>(null);
+  const [sheetCutDragging, setSheetCutDragging] = useState<{ axis: "vertical" | "horizontal"; index: number } | null>(null);
 
   useEffect(() => {
     if (showDesignRoom) setDrStep(1);
@@ -317,16 +345,29 @@ export default function StampToolMobile() {
     () => safeCuts(horizontalCuts, gridSize),
     [horizontalCuts, gridSize],
   );
-  const resultCutGridStyle = useMemo(() => {
+  // cut%(切り出し窓基準 0-100) → シート画像上の位置%（PC版と同じマッピング）
+  const mapCutToSheetX = (cut: number) =>
+    cutBounds ? cutBounds.left + ((cutBounds.right - cutBounds.left) * cut) / 100 : cut;
+  const mapCutToSheetY = (cut: number) =>
+    cutBounds ? cutBounds.top + ((cutBounds.bottom - cutBounds.top) * cut) / 100 : cut;
+  const sheetVLines = verticalLinePositions.map(mapCutToSheetX);
+  const sheetHLines = horizontalLinePositions.map(mapCutToSheetY);
+  const sheetCellNumbers = useMemo(() => {
     const xs = [0, ...verticalLinePositions, 100];
     const ys = [0, ...horizontalLinePositions, 100];
-    const columns = Array.from({ length: gridSize }, (_, index) => xs[index + 1] - xs[index]);
-    const rows = Array.from({ length: gridSize }, (_, index) => ys[index + 1] - ys[index]);
-    return {
-      gridTemplateColumns: columns.map((size) => `${size}fr`).join(" "),
-      gridTemplateRows: rows.map((size) => `${size}fr`).join(" "),
-    };
-  }, [verticalLinePositions, horizontalLinePositions, gridSize]);
+    const numbers: { index: number; x: number; y: number }[] = [];
+    for (let row = 0; row < gridSize; row += 1) {
+      for (let col = 0; col < gridSize; col += 1) {
+        numbers.push({
+          index: row * gridSize + col,
+          x: mapCutToSheetX(xs[col]),
+          y: mapCutToSheetY(ys[row]),
+        });
+      }
+    }
+    return numbers;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verticalLinePositions, horizontalLinePositions, gridSize, cutBounds]);
   const canCopy =
     petKind !== null && (petKind !== "その他" || petKindOther.trim().length > 0);
 
@@ -420,6 +461,7 @@ export default function StampToolMobile() {
     verticalCutsRef.current = estimate.vertical;
     horizontalCutsRef.current = estimate.horizontal;
     cutBoundsRef.current = estimate.bounds;
+    sheetProfilesRef.current = estimate.profiles;
     setVerticalCuts(estimate.vertical);
     setHorizontalCuts(estimate.horizontal);
     setCutBounds(estimate.bounds);
@@ -432,7 +474,7 @@ export default function StampToolMobile() {
       setSheetSrc(null);
       setSplitMsg("");
       setSelectedIndex(0);
-      clearResultCutDrag();
+      clearSheetCutDrag();
       setCellOffsets({});
       setCropOverrideState({});
       clearManualCellSrcOverrides();
@@ -518,7 +560,7 @@ export default function StampToolMobile() {
     if (!sheetSrc) return;
     const jobId = ++splitJobRef.current;
     const keepIndex = Math.min(selectedIndex, Math.max(0, expectedCellCount - 1));
-    clearResultCutDrag();
+    clearSheetCutDrag();
     setProcessingSplit(true);
     setSplitMsg(options.message ?? "");
     try {
@@ -603,9 +645,24 @@ export default function StampToolMobile() {
     };
   }
 
-  function clearResultCutDrag() {
-    resultCutDragRef.current = null;
-    setResultCutDragging(null);
+  function clearSheetCutDrag() {
+    sheetCutDragRef.current = null;
+    setSheetCutDragging(null);
+  }
+
+  // セル選択時、編集パネルが画面外なら自動でスクロールして見せる
+  // （既に見えている時は動かさない＝コマを次々切り替える時に画面が暴れない）
+  function scrollEditPanelIntoView() {
+    // rAFは非表示タブ等で発火しないことがあるためsetTimeoutで確実に
+    window.setTimeout(() => {
+      const el =
+        editPanelRef.current ?? document.querySelector<HTMLElement>(".vm-edit-panel");
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.top > window.innerHeight * 0.75 || rect.bottom < 120) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
   }
 
   function cropOverrideFor(index: number): CellCropOverride {
@@ -650,7 +707,7 @@ export default function StampToolMobile() {
 
   function resetOffset() {
     if (!selectedCell) return;
-    clearResultCutDrag();
+    clearSheetCutDrag();
     setCellOffsets((current) => ({ ...current, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } }));
     const next = { ...cellCropOverridesRef.current };
     delete next[selectedIndex];
@@ -697,24 +754,18 @@ export default function StampToolMobile() {
     return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
   }
 
-  function updateResultCutLine(axis: ResultCutDrag["axis"], index: number, value: number) {
-    const current = axis === "vertical" ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
-    current[index] = value;
-    if (axis === "vertical") setVerticalCutsState(current);
-    else setHorizontalCutsState(current);
-    const drag = resultCutDragRef.current;
-    if (drag) drag.latestCuts = axis === "vertical" ? verticalCutsRef.current : horizontalCutsRef.current;
-  }
+  // ===== PC版と同じ「シート上のピンク線ドラッグ」 =====
+  // 絵は固定・線だけ動く。動かしてる間は線がスッと追従し、指を離すと下の分割画像を作り直す。
 
-  function startResultCutDrag(event: ReactPointerEvent<HTMLButtonElement>, axis: ResultCutDrag["axis"], index: number) {
+  function startSheetCutDrag(event: ReactPointerEvent<HTMLButtonElement>, axis: SheetCutDrag["axis"], index: number) {
     if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (processingSplit || !resultGridRef.current) return;
+    if (processingSplit || !sheetCutterRef.current) return;
     event.preventDefault();
     event.stopPropagation();
     clearCropGesture();
-    const rect = resultGridRef.current.getBoundingClientRect();
-    const startCuts = axis === "vertical" ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
-    resultCutDragRef.current = {
+    const rect = sheetCutterRef.current.getBoundingClientRect();
+    const cuts = axis === "vertical" ? verticalCutsRef.current : horizontalCutsRef.current;
+    sheetCutDragRef.current = {
       axis,
       pointerId: event.pointerId,
       index,
@@ -722,55 +773,44 @@ export default function StampToolMobile() {
       startY: event.clientY,
       width: Math.max(1, rect.width),
       height: Math.max(1, rect.height),
-      startCuts,
-      latestCuts: startCuts,
+      startCut: cuts[index] ?? 50,
       moved: false,
     };
-    setResultCutDragging({ axis, index });
+    setSheetCutDragging({ axis, index });
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.setPointerCapture(event.pointerId);
     }
   }
 
-  function moveResultCutDrag(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = resultCutDragRef.current;
+  function moveSheetCutDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = sheetCutDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    // 6px のデッドゾーン内は「タップ」扱いにして線を一切動かさない
-    // （微小な指ブレでカット線が勝手にズレたり、再カットが走るのを防ぐ）
-    const movedPx =
-      drag.axis === "vertical"
-        ? Math.abs(event.clientX - drag.startX)
-        : Math.abs(event.clientY - drag.startY);
-    if (!drag.moved && movedPx <= RESULT_CUT_DRAG_THRESHOLD_PX) return;
+    // デッドゾーン: 微小な指ブレで線が動かないように
+    const deltaPx = drag.axis === "vertical" ? event.clientX - drag.startX : event.clientY - drag.startY;
+    if (!drag.moved && Math.abs(deltaPx) <= RESULT_CUT_DRAG_THRESHOLD_PX) return;
     drag.moved = true;
-    const delta =
+    // 画面px → シート画像% → cut%（切り出し窓基準）
+    const b = cutBoundsRef.current;
+    const range =
       drag.axis === "vertical"
-        ? ((event.clientX - drag.startX) / drag.width) * 100
-        : ((event.clientY - drag.startY) / drag.height) * 100;
-    updateResultCutLine(drag.axis, drag.index, drag.startCuts[drag.index] + delta);
+        ? b
+          ? Math.max(1, b.right - b.left)
+          : 100
+        : b
+          ? Math.max(1, b.bottom - b.top)
+          : 100;
+    const sizePx = drag.axis === "vertical" ? drag.width : drag.height;
+    const deltaCut = ((deltaPx / sizePx) * 100 * 100) / range;
+    const next = drag.axis === "vertical" ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
+    next[drag.index] = drag.startCut + deltaCut;
+    if (drag.axis === "vertical") setVerticalCutsState(next);
+    else setHorizontalCutsState(next);
   }
 
-  // ハンドルの真下にあるセルを選択する（当たり判定がセル選択タップを奪わないための透過処理）
-  function selectCellAtPoint(clientX: number, clientY: number) {
-    const gridEl = resultGridRef.current;
-    if (!gridEl || typeof document === "undefined") return;
-    const cellEl = document
-      .elementsFromPoint(clientX, clientY)
-      .find(
-        (el): el is HTMLElement =>
-          el instanceof HTMLElement && el.classList.contains("vm-reorder-cell"),
-      );
-    if (!cellEl) return;
-    const idx = Array.from(gridEl.querySelectorAll(".vm-reorder-cell")).indexOf(cellEl);
-    if (idx < 0) return;
-    clearCropGesture();
-    setSelectedIndex(idx);
-  }
-
-  function finishResultCutDrag(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = resultCutDragRef.current;
+  function finishSheetCutDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = sheetCutDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
@@ -778,16 +818,29 @@ export default function StampToolMobile() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     if (drag.moved) {
+      // 指を離した位置の近く(±3.5%)に「コマ間の余白の谷」があれば、そこへ磁石のように吸着
+      const profiles = sheetProfilesRef.current;
+      const b = cutBoundsRef.current;
+      if (profiles) {
+        const isV = drag.axis === "vertical";
+        const startPx = (((isV ? b?.left : b?.top) ?? 0) / 100) * (isV ? profiles.w : profiles.h);
+        const endPx = (((isV ? b?.right : b?.bottom) ?? 100) / 100) * (isV ? profiles.w : profiles.h);
+        const cuts = isV ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
+        const current = cuts[drag.index];
+        const snapped = findValleyCut(isV ? profiles.col : profiles.row, startPx, endPx, current, 3.5);
+        if (snapped != null && Math.abs(snapped - current) > 0.05) {
+          cuts[drag.index] = snapped;
+          if (isV) setVerticalCutsState(cuts);
+          else setHorizontalCutsState(cuts);
+        }
+      }
       clearManualCellSrcOverrides();
       eraseSourceRef.current = null;
       eraseTargetIndexRef.current = null;
       setCellOffsets({});
       void regenerateSplitCells(cellCropOverridesRef.current, { message: "" });
-    } else {
-      // 動かさず離した＝タップ。真下のセルを選択する
-      selectCellAtPoint(event.clientX, event.clientY);
     }
-    clearResultCutDrag();
+    clearSheetCutDrag();
   }
 
   function previewTransformFor(id: string) {
@@ -1074,9 +1127,52 @@ export default function StampToolMobile() {
     event.preventDefault();
   }
 
+  // ── 合算（複数シート → 最大40個） ─────────────────────
+  const MAX_STOCK = 40;
+
+  function stockCurrentCells() {
+    if (!splitCells.length || processingSplit) return;
+    const base = stockCells.length;
+    const room = MAX_STOCK - base;
+    if (room <= 0) return;
+    const take = splitCells.slice(0, room);
+    const renamed = take.map((cell, i) => ({
+      ...cell,
+      id: `stock-${base + i}-${cell.id}`,
+      name: `stamp_${String(base + i + 1).padStart(2, "0")}.png`,
+    }));
+    // 手動オフセット（位置/拡大）も新IDへ引き継ぐ
+    setStockOffsets((prev) => {
+      const next = { ...prev };
+      take.forEach((cell, i) => {
+        const o = cellOffsets[cell.id];
+        if (o) next[`stock-${base + i}-${cell.id}`] = o;
+      });
+      return next;
+    });
+    setStockCells((prev) => [...prev, ...renamed]);
+    // 現在のシートを片付けて、次のシートを受け入れられる状態に
+    cancelPendingSplitWork();
+    setSplitCells([]);
+    setRawSheetSrc(null);
+    setSelectedIndex(0);
+    clearSheetCutDrag();
+    setCellOffsets({});
+    setCropOverrideState({});
+    clearManualCellSrcOverrides();
+    clearEraseStrokeOverrides();
+    setSplitMsg(`${base + renamed.length}個たまりました。次のシート画像を入れてください。`);
+  }
+
+  function clearStock() {
+    setStockCells([]);
+    setStockOffsets({});
+    setSplitMsg("");
+  }
+
   async function changeGridSize(size: GridSize) {
     setSelectedIndex(0);
-    clearResultCutDrag();
+    clearSheetCutDrag();
     setCropOverrideState({});
     clearManualCellSrcOverrides();
     clearEraseStrokeOverrides();
@@ -1181,8 +1277,20 @@ export default function StampToolMobile() {
 
         {splitCells.length === 0 && !processingSplit && (
           <div className="vm-placeholder">
-            <h3>まだ画像がありません</h3>
-            <p>上のボタンから画像を選んでください。</p>
+            {stockCells.length > 0 ? (
+              <>
+                <h3>{stockCells.length}個たまっています</h3>
+                <p>次のシート画像を入れて追加するか、下の保存へ進んでください。</p>
+                <button type="button" className="vm-stock-clear" onClick={clearStock}>
+                  たまり{stockCells.length}個をクリア
+                </button>
+              </>
+            ) : (
+              <>
+                <h3>まだ画像がありません</h3>
+                <p>上のボタンから画像を選んでください。</p>
+              </>
+            )}
           </div>
         )}
 
@@ -1210,10 +1318,67 @@ export default function StampToolMobile() {
                 </div>
               </div>
 
+              {sheetSrc && (
+                <>
+                  <div className="vm-sheet-cutter" ref={sheetCutterRef}>
+                    <img src={sheetSrc} alt="分割前のシート" draggable={false} />
+                    {cutBounds && (
+                      <div
+                        className="vm-sheet-bounds"
+                        style={{
+                          left: `${cutBounds.left}%`,
+                          top: `${cutBounds.top}%`,
+                          width: `${cutBounds.right - cutBounds.left}%`,
+                          height: `${cutBounds.bottom - cutBounds.top}%`,
+                        }}
+                      />
+                    )}
+                    {sheetCellNumbers.map((n) => (
+                      <span
+                        key={`sheet-num-${n.index}`}
+                        className="vm-sheet-cell-num"
+                        style={{ left: `${n.x}%`, top: `${n.y}%` }}
+                      >
+                        {n.index + 1}
+                      </span>
+                    ))}
+                    {sheetVLines.map((pos, index) => (
+                      <button
+                        key={`sheet-cut-v-${index}`}
+                        type="button"
+                        className={`vm-sheet-cut-line vertical${sheetCutDragging?.axis === "vertical" && sheetCutDragging.index === index ? " is-active" : ""}`}
+                        style={{ left: `${pos}%` }}
+                        aria-label={`縦の分割線${index + 1}を動かす`}
+                        onPointerDown={(event) => startSheetCutDrag(event, "vertical", index)}
+                        onPointerMove={moveSheetCutDrag}
+                        onPointerUp={finishSheetCutDrag}
+                        onPointerCancel={finishSheetCutDrag}
+                      />
+                    ))}
+                    {sheetHLines.map((pos, index) => (
+                      <button
+                        key={`sheet-cut-h-${index}`}
+                        type="button"
+                        className={`vm-sheet-cut-line horizontal${sheetCutDragging?.axis === "horizontal" && sheetCutDragging.index === index ? " is-active" : ""}`}
+                        style={{ top: `${pos}%` }}
+                        aria-label={`横の分割線${index + 1}を動かす`}
+                        onPointerDown={(event) => startSheetCutDrag(event, "horizontal", index)}
+                        onPointerMove={moveSheetCutDrag}
+                        onPointerUp={finishSheetCutDrag}
+                        onPointerCancel={finishSheetCutDrag}
+                      />
+                    ))}
+                  </div>
+                  <p className="vm-sheet-cutter-hint">ピンクの線をドラッグして切る位置を調整（指を離すと下に反映）</p>
+                </>
+              )}
+
               <div
-                ref={resultGridRef}
-                className={`vm-reorder-grid${resultCutDragging ? " is-cut-dragging" : ""}`}
-                style={resultCutGridStyle}
+                className="vm-reorder-grid"
+                style={{
+                  gridTemplateColumns: `repeat(${gridSize}, 1fr)`,
+                  gridTemplateRows: `repeat(${gridSize}, 1fr)`,
+                }}
               >
                 {splitCells.map((cell, index) => {
                   const isSelected = index === selectedIndex;
@@ -1226,6 +1391,7 @@ export default function StampToolMobile() {
                       onClick={() => {
                         clearCropGesture();
                         setSelectedIndex(index);
+                        scrollEditPanelIntoView();
                       }}
                       aria-label={`${index + 1}番を選択`}
                     >
@@ -1235,32 +1401,6 @@ export default function StampToolMobile() {
                     </button>
                   );
                 })}
-                {verticalLinePositions.map((pct, index) => (
-                  <button
-                    key={`result-cut-v-${index}`}
-                    type="button"
-                    className={`vm-result-cut-handle vertical${resultCutDragging?.axis === "vertical" && resultCutDragging.index === index ? " is-active" : ""}`}
-                    style={{ left: `${pct}%` }}
-                    aria-label={`縦の分割線${index + 1}を動かす`}
-                    onPointerDown={(event) => startResultCutDrag(event, "vertical", index)}
-                    onPointerMove={moveResultCutDrag}
-                    onPointerUp={finishResultCutDrag}
-                    onPointerCancel={finishResultCutDrag}
-                  />
-                ))}
-                {horizontalLinePositions.map((pct, index) => (
-                  <button
-                    key={`result-cut-h-${index}`}
-                    type="button"
-                    className={`vm-result-cut-handle horizontal${resultCutDragging?.axis === "horizontal" && resultCutDragging.index === index ? " is-active" : ""}`}
-                    style={{ top: `${pct}%` }}
-                    aria-label={`横の分割線${index + 1}を動かす`}
-                    onPointerDown={(event) => startResultCutDrag(event, "horizontal", index)}
-                    onPointerMove={moveResultCutDrag}
-                    onPointerUp={finishResultCutDrag}
-                    onPointerCancel={finishResultCutDrag}
-                  />
-                ))}
               </div>
 
               <label className={`vm-transparent-toggle vm-transparent-after-split${transparentEnabled ? " is-on" : ""}`}>
@@ -1273,10 +1413,32 @@ export default function StampToolMobile() {
                 <span>自動透過</span>
                 <small>分割後の各コマに、PC版と同じ白背景透過をかけます</small>
               </label>
+
+              {/* 合算: 複数シートを貯めて最大40個のセットにする */}
+              <div className="vm-stock-bar">
+                <button
+                  type="button"
+                  className="vm-stock-add"
+                  disabled={processingSplit || stockCells.length >= MAX_STOCK}
+                  onClick={stockCurrentCells}
+                >
+                  ➕ この{splitCells.length}個を確定して次のシートを追加
+                </button>
+                <small>
+                  {stockCells.length > 0
+                    ? `たまり ${stockCells.length}個 ＋ 今の ${splitCells.length}個 ＝ 合計 ${Math.min(MAX_STOCK, stockCells.length + splitCells.length)}個（最大${MAX_STOCK}）`
+                    : `複数シートで40個セットを作る時に使います（8/16/24/32/40個）`}
+                </small>
+                {stockCells.length > 0 && (
+                  <button type="button" className="vm-stock-clear" onClick={clearStock}>
+                    たまりをクリア
+                  </button>
+                )}
+              </div>
             </section>
 
             {selectedCell && (
-              <section className="vm-card vm-edit-panel">
+              <section className="vm-card vm-edit-panel" ref={editPanelRef}>
                 <div className="vm-edit-head">
                   <h3 className="vm-card-title">{selectedIndex + 1}番を部分修正</h3>
                 </div>
@@ -1339,46 +1501,36 @@ export default function StampToolMobile() {
                       <div className="vm-tool-title">
                         <span>整える</span>
                       </div>
-                      <div className="vm-center-row">
+                      {/* 位置: 矢印はイラストが動く向き。真ん中は中央揃え */}
+                      <div className="vm-edit-pad" aria-label="位置調整">
+                        <span className="vm-edit-empty" />
+                        <button type="button" aria-label="イラストを上へ" onClick={() => nudgeCrop(0, 1)}>↑</button>
+                        <span className="vm-edit-empty" />
+                        <button type="button" aria-label="イラストを左へ" onClick={() => nudgeCrop(1, 0)}>←</button>
                         <button
                           type="button"
+                          className="center"
+                          aria-label="中央に揃える"
                           onClick={centerSelectedContent}
                           disabled={centerBusy || eraseBusy || processingSplit}
                         >
-                          {centerBusy ? "整え中..." : "中央にそろえる"}
+                          {centerBusy ? "…" : "中央"}
                         </button>
-                        <button type="button" className="vm-reset-button" onClick={resetOffset}>
-                          リセット
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="vm-tool-section">
-                      <div className="vm-tool-title">
-                        <span>移動</span>
-                      </div>
-                      <div className="vm-edit-pad" aria-label="位置調整">
+                        <button type="button" aria-label="イラストを右へ" onClick={() => nudgeCrop(-1, 0)}>→</button>
                         <span className="vm-edit-empty" />
-                        <button type="button" aria-label="切り出し範囲を上へ" onClick={() => nudgeCrop(0, -1)}>↑</button>
-                        <span className="vm-edit-empty" />
-                        <button type="button" aria-label="切り出し範囲を左へ" onClick={() => nudgeCrop(-1, 0)}>←</button>
-                        <button type="button" className="center" aria-label="中央に戻す" onClick={resetOffset}>0</button>
-                        <button type="button" aria-label="切り出し範囲を右へ" onClick={() => nudgeCrop(1, 0)}>→</button>
-                        <span className="vm-edit-empty" />
-                        <button type="button" aria-label="切り出し範囲を下へ" onClick={() => nudgeCrop(0, 1)}>↓</button>
+                        <button type="button" aria-label="イラストを下へ" onClick={() => nudgeCrop(0, -1)}>↓</button>
                         <span className="vm-edit-empty" />
                       </div>
-                    </div>
-
-                    <div className="vm-tool-section">
-                      <div className="vm-tool-title">
-                        <span>大きさ</span>
-                      </div>
+                      {/* 大きさ */}
                       <div className="vm-zoom-row">
                         <button type="button" onClick={() => expandCrop(0.5)}>小さく</button>
                         <span>{Math.max(cropOverrideFor(selectedIndex).padX ?? 0, cropOverrideFor(selectedIndex).padY ?? 0).toFixed(1)}%</span>
                         <button type="button" onClick={() => expandCrop(-0.5)}>大きく</button>
                       </div>
+                      {/* リセットは独立ボタン */}
+                      <button type="button" className="vm-reset-button vm-reset-wide" onClick={resetOffset}>
+                        リセット（このコマを最初の状態に戻す）
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1386,9 +1538,17 @@ export default function StampToolMobile() {
             )}
 
             {splitCells.length === expectedCellCount && (
-              <Step3MobileSave splitCells={splitCells} cellOffsets={cellOffsets} />
+              <Step3MobileSave
+                splitCells={stockCells.length ? [...stockCells, ...splitCells].slice(0, MAX_STOCK) : splitCells}
+                cellOffsets={stockCells.length ? { ...stockOffsets, ...cellOffsets } : cellOffsets}
+              />
             )}
           </>
+        )}
+
+        {/* 現在シートが空でも、たまりがあれば保存できる */}
+        {splitCells.length === 0 && stockCells.length > 0 && !processingSplit && (
+          <Step3MobileSave splitCells={stockCells} cellOffsets={stockOffsets} />
         )}
       </main>
 

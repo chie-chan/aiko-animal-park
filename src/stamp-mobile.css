@@ -447,75 +447,144 @@
 .vm-reorder-cell.is-dragging {
   opacity: 0.45;
 }
-.vm-result-cut-handle {
+/* ===== 合算（複数シート→最大40個） ===== */
+.vm-stock-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1.5px dashed var(--vm-line);
+  border-radius: 12px;
+}
+.vm-stock-add {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: var(--vm-pink-soft, #ffd5e6);
+  color: var(--vm-ink, #2f1b3d);
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+.vm-stock-add:disabled {
+  opacity: 0.5;
+}
+.vm-stock-bar small {
+  font-size: 11px;
+  color: var(--vm-sub, #8a7a90);
+}
+.vm-stock-clear {
+  appearance: none;
+  align-self: flex-start;
+  border: 1px solid var(--vm-line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #fff;
+  font-size: 11px;
+  color: var(--vm-sub, #8a7a90);
+  cursor: pointer;
+}
+
+/* ===== PC版と同じ「シート＋ピンク線」カット調整ビュー ===== */
+.vm-sheet-cutter {
+  position: relative;
+  margin-top: 10px;
+  border: 1px solid var(--vm-line);
+  border-radius: 12px;
+  overflow: hidden;
+  touch-action: pan-y;
+  user-select: none;
+  background: #fff;
+}
+.vm-sheet-cutter img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+.vm-sheet-bounds {
+  position: absolute;
+  border: 1.5px dashed rgba(233, 84, 152, 0.5);
+  border-radius: 4px;
+  pointer-events: none;
+}
+.vm-sheet-cell-num {
+  position: absolute;
+  transform: translate(3px, 3px);
+  min-width: 16px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(47, 27, 61, 0.55);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+}
+.vm-sheet-cut-line {
   appearance: none;
   position: absolute;
-  z-index: 7;
+  z-index: 5;
   border: 0;
   padding: 0;
   background: transparent;
   touch-action: none;
 }
-/* カット線自体は描かず、中点に小さなグリップだけ薄く出して「掴める場所」を示す */
-.vm-result-cut-handle::before {
+.vm-sheet-cut-line::before {
   content: "";
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  background: #e95498;
+  opacity: 0.75;
   border-radius: 999px;
-  background: rgba(47, 27, 61, 0.34);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
-  opacity: 0.5;
-  transition: opacity 120ms ease;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
   pointer-events: none;
 }
-.vm-result-cut-handle.vertical::before {
-  width: 5px;
-  height: 28px;
-}
-.vm-result-cut-handle.horizontal::before {
-  width: 28px;
-  height: 5px;
-}
-.vm-result-cut-handle.is-active::before {
-  opacity: 0;
-}
-.vm-result-cut-handle.vertical {
+.vm-sheet-cut-line.vertical {
   top: 0;
   bottom: 0;
-  width: 26px;
+  width: 30px;
   transform: translateX(-50%);
   cursor: col-resize;
 }
-.vm-result-cut-handle.horizontal {
+.vm-sheet-cut-line.vertical::before {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  transform: translateX(-50%);
+}
+.vm-sheet-cut-line.horizontal {
   left: 0;
   right: 0;
-  height: 26px;
+  height: 30px;
   transform: translateY(-50%);
   cursor: row-resize;
 }
-.vm-result-cut-handle.is-active {
-  opacity: 1;
-}
-.vm-result-cut-handle.is-active::after {
-  content: "";
-  position: absolute;
-  border-radius: 999px;
-  background: rgba(47, 27, 61, 0.16);
-}
-.vm-result-cut-handle.vertical.is-active::after {
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 8px;
-  transform: translateX(-50%);
-}
-.vm-result-cut-handle.horizontal.is-active::after {
+.vm-sheet-cut-line.horizontal::before {
+  top: 50%;
   left: 0;
   right: 0;
-  top: 50%;
-  height: 8px;
+  height: 3px;
+  transform: translateY(-50%);
+}
+.vm-sheet-cut-line.is-active::before {
+  opacity: 1;
+  background: #d63384;
+}
+.vm-sheet-cut-line.vertical.is-active::before {
+  width: 5px;
+}
+.vm-sheet-cut-line.horizontal.is-active::before {
+  height: 5px;
+}
+.vm-sheet-cutter-hint {
+  margin: 6px 2px 0;
+  font-size: 11px;
+  color: var(--vm-sub, #8a7a90);
   transform: translateY(-50%);
 }
 .vm-reorder-cell-num {
@@ -758,6 +827,23 @@
 .vm-edit-pad button.center {
   background: linear-gradient(135deg, #fff5fa, #fde6ef);
   color: var(--vm-pink);
+  font-size: 12px;
+  font-weight: 900;
+}
+.vm-edit-pad button.center:disabled {
+  opacity: 0.5;
+}
+.vm-reset-wide {
+  width: 100%;
+  margin-top: 10px;
+  min-height: 38px;
+  border: 1.5px solid var(--vm-line);
+  background: #fff;
+  border-radius: 10px;
+  color: var(--vm-sub, #8a7a90);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
 }
 .vm-edit-pad .vm-edit-empty {
   visibility: hidden;
@@ -767,7 +853,7 @@
   grid-template-columns: 1fr minmax(54px, auto) 1fr;
   align-items: center;
   gap: 6px;
-  margin-top: 0;
+  margin-top: 8px;
 }
 .vm-zoom-row button {
   min-height: 38px;
