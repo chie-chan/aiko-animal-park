@@ -551,6 +551,23 @@
   border-color: var(--vm-pink);
   box-shadow: 0 0 0 3px var(--vm-pink-soft);
 }
+.vm-reorder-cell.is-selected::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 4;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(227, 110, 160, 0.4);
+  background:
+    linear-gradient(var(--vm-pink), var(--vm-pink)) center / 11px 2px no-repeat,
+    linear-gradient(var(--vm-pink), var(--vm-pink)) center / 2px 11px no-repeat,
+    rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 8px rgba(227, 110, 160, 0.18);
+  pointer-events: none;
+}
 .vm-reorder-cell.is-crop-adjusted {
   border-style: solid;
   border-color: var(--vm-purple);
@@ -562,6 +579,10 @@
   cursor: grabbing;
   z-index: 4;
   box-shadow: 0 10px 22px rgba(227, 110, 160, 0.28);
+}
+.vm-reorder-cell.is-moving::after {
+  border-color: rgba(227, 110, 160, 0.75);
+  box-shadow: 0 4px 12px rgba(227, 110, 160, 0.3);
 }
 .vm-reorder-cell.is-moving img {
   transition: none;
