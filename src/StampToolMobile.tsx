@@ -76,12 +76,6 @@ type CropGesture = {
   changed: boolean;
 };
 
-type CutDrag = {
-  axis: "vertical" | "horizontal";
-  index: number;
-  pointerId: number;
-};
-
 type CellMoveDrag = {
   pointerId: number;
   cellId: string;
@@ -271,12 +265,8 @@ export default function StampToolMobile() {
   const [dragActive, setDragActive] = useState(false);
   const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
   const [splitBgPreview, setSplitBgPreview] = useState<MobileBgPreview>("checker");
-  const [verticalCuts, setVerticalCuts] = useState<number[]>(() => defaultCuts(4));
-  const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(4));
   const [cutBounds, setCutBounds] = useState<CropBounds | null>(null);
-  const [cutDrag, setCutDrag] = useState<CutDrag | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const splitCutPreviewRef = useRef<HTMLDivElement>(null);
   const editPreviewRef = useRef<HTMLDivElement>(null);
   const eraseBusyRef = useRef(false);
   const eraseQueueRef = useRef<EraseStroke[]>([]);
@@ -327,24 +317,6 @@ export default function StampToolMobile() {
     () => selectedFrame.buildPrompt({ petKind, petKindOther, features }, gridSize),
     [selectedFrame, petKind, petKindOther, features, gridSize],
   );
-  const verticalLinePositions = useMemo(
-    () => safeCuts(verticalCuts, gridSize),
-    [verticalCuts, gridSize],
-  );
-  const horizontalLinePositions = useMemo(
-    () => safeCuts(horizontalCuts, gridSize),
-    [horizontalCuts, gridSize],
-  );
-  const cutGridStyle = useMemo(() => {
-    const xs = [0, ...verticalLinePositions, 100];
-    const ys = [0, ...horizontalLinePositions, 100];
-    const columns = Array.from({ length: gridSize }, (_, index) => xs[index + 1] - xs[index]);
-    const rows = Array.from({ length: gridSize }, (_, index) => ys[index + 1] - ys[index]);
-    return {
-      gridTemplateColumns: columns.map((size) => `${size}fr`).join(" "),
-      gridTemplateRows: rows.map((size) => `${size}fr`).join(" "),
-    };
-  }, [verticalLinePositions, horizontalLinePositions, gridSize]);
   const canCopy =
     petKind !== null && (petKind !== "その他" || petKindOther.trim().length > 0);
 
@@ -411,27 +383,12 @@ export default function StampToolMobile() {
     eraseStrokeOverridesRef.current = {};
   }
 
-  function setVerticalCutsState(next: number[], size: GridSize = gridSize) {
-    const safe = safeCuts(next, size);
-    verticalCutsRef.current = safe;
-    setVerticalCuts(safe);
-  }
-
-  function setHorizontalCutsState(next: number[], size: GridSize = gridSize) {
-    const safe = safeCuts(next, size);
-    horizontalCutsRef.current = safe;
-    setHorizontalCuts(safe);
-  }
-
   function resetCutLines(size: GridSize = gridSize) {
     const next = defaultCuts(size);
     verticalCutsRef.current = next;
     horizontalCutsRef.current = next;
     cutBoundsRef.current = null;
-    setVerticalCuts(next);
-    setHorizontalCuts(next);
     setCutBounds(null);
-    setCutDrag(null);
   }
 
   async function applyEstimatedCutLines(src: string, size: GridSize = gridSize) {
@@ -439,10 +396,7 @@ export default function StampToolMobile() {
     verticalCutsRef.current = estimate.vertical;
     horizontalCutsRef.current = estimate.horizontal;
     cutBoundsRef.current = estimate.bounds;
-    setVerticalCuts(estimate.vertical);
-    setHorizontalCuts(estimate.horizontal);
     setCutBounds(estimate.bounds);
-    setCutDrag(null);
   }
 
   async function handleFile(files: FileList | null) {
@@ -676,42 +630,6 @@ export default function StampToolMobile() {
       padX: (current.padX ?? 0) + delta,
       padY: (current.padY ?? 0) + delta,
     });
-  }
-
-  function updateCutLine(axis: CutDrag["axis"], index: number, value: number) {
-    const cuts = axis === "vertical" ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
-    cuts[index] = clamp(value, 4, 96);
-    if (axis === "vertical") setVerticalCutsState(cuts);
-    else setHorizontalCutsState(cuts);
-  }
-
-  function startCutLineDrag(event: ReactPointerEvent<HTMLButtonElement>, axis: CutDrag["axis"], index: number) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (processingSplit || !splitCutPreviewRef.current) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setCutDrag({ axis, index, pointerId: event.pointerId });
-  }
-
-  function moveCutLineDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!cutDrag || cutDrag.pointerId !== event.pointerId || !splitCutPreviewRef.current) return;
-    event.preventDefault();
-    const rect = splitCutPreviewRef.current.getBoundingClientRect();
-    const value =
-      cutDrag.axis === "vertical"
-        ? ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100
-        : ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100;
-    updateCutLine(cutDrag.axis, cutDrag.index, value);
-  }
-
-  function finishCutLineDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!cutDrag || cutDrag.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    setCutDrag(null);
-    clearManualCellSrcOverrides();
-    eraseSourceRef.current = null;
-    eraseTargetIndexRef.current = null;
-    void regenerateSplitCells(cellCropOverridesRef.current, { message: "" });
   }
 
   function resetOffset() {
@@ -1244,45 +1162,6 @@ export default function StampToolMobile() {
                   <span className="vm-split-count">{splitCells.length}個</span>
                 </div>
               </div>
-
-              {sheetSrc && (
-                <div
-                  ref={splitCutPreviewRef}
-                  className={`vm-cut-preview${cutDrag ? " is-dragging" : ""}`}
-                  onPointerMove={moveCutLineDrag}
-                  onPointerUp={finishCutLineDrag}
-                  onPointerCancel={finishCutLineDrag}
-                >
-                  <div className="vm-cut-grid" style={cutGridStyle}>
-                    {splitCells.map((cell, index) => (
-                      <span key={`cut-cell-${cell.id}`} className="vm-cut-cell">
-                        <span>{index + 1}</span>
-                        <img src={cell.src} alt="" draggable={false} />
-                      </span>
-                    ))}
-                  </div>
-                  {verticalLinePositions.map((pct, index) => (
-                    <button
-                      key={`cut-v-${index}`}
-                      type="button"
-                      className="vm-cut-line vertical"
-                      style={{ left: `${pct}%` }}
-                      aria-label={`縦のカット線${index + 1}`}
-                      onPointerDown={(event) => startCutLineDrag(event, "vertical", index)}
-                    />
-                  ))}
-                  {horizontalLinePositions.map((pct, index) => (
-                    <button
-                      key={`cut-h-${index}`}
-                      type="button"
-                      className="vm-cut-line horizontal"
-                      style={{ top: `${pct}%` }}
-                      aria-label={`横のカット線${index + 1}`}
-                      onPointerDown={(event) => startCutLineDrag(event, "horizontal", index)}
-                    />
-                  ))}
-                </div>
-              )}
 
               <div
                 className="vm-reorder-grid"
