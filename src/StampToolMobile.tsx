@@ -76,16 +76,16 @@ type CropGesture = {
   changed: boolean;
 };
 
-type CellMoveDrag = {
+type ResultCutDrag = {
+  axis: "vertical" | "horizontal";
   pointerId: number;
-  cellId: string;
   index: number;
   startX: number;
   startY: number;
   width: number;
   height: number;
-  startOverride: CellCropOverride;
-  latestOverride: CellCropOverride;
+  startCuts: number[];
+  latestCuts: number[];
   moved: boolean;
 };
 
@@ -252,8 +252,11 @@ export default function StampToolMobile() {
   const [dragActive, setDragActive] = useState(false);
   const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
   const [splitBgPreview, setSplitBgPreview] = useState<MobileBgPreview>("checker");
+  const [verticalCuts, setVerticalCuts] = useState<number[]>(() => defaultCuts(4));
+  const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(4));
   const [cutBounds, setCutBounds] = useState<CropBounds | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resultGridRef = useRef<HTMLDivElement>(null);
   const editPreviewRef = useRef<HTMLDivElement>(null);
   const eraseBusyRef = useRef(false);
   const eraseQueueRef = useRef<EraseStroke[]>([]);
@@ -263,7 +266,7 @@ export default function StampToolMobile() {
   const eraserPointerIdRef = useRef<number | null>(null);
   const cropGestureRef = useRef<CropGesture | null>(null);
   const cropPointersRef = useRef<Map<number, GesturePoint>>(new Map());
-  const cellMoveDragRef = useRef<CellMoveDrag | null>(null);
+  const resultCutDragRef = useRef<ResultCutDrag | null>(null);
   // ピンチ/パンのプレビュー更新を1フレーム1回に間引く（毎pointermoveのsetStateを避けてなめらかに）
   const cropRafRef = useRef<number | null>(null);
   const cropLatestPointsRef = useRef<GesturePoint[]>([]);
@@ -284,8 +287,7 @@ export default function StampToolMobile() {
   const [centerBusy, setCenterBusy] = useState(false);
   const [cropGesturing, setCropGesturing] = useState(false);
   const [gesturePreviewTransform, setGesturePreviewTransform] = useState<string | undefined>();
-  const [cellMovePreview, setCellMovePreview] = useState<{ id: string; transform: string } | null>(null);
-  const [movingCellId, setMovingCellId] = useState<string | null>(null);
+  const [resultCutDragging, setResultCutDragging] = useState<{ axis: "vertical" | "horizontal"; index: number } | null>(null);
 
   useEffect(() => {
     if (showDesignRoom) setDrStep(1);
@@ -304,6 +306,24 @@ export default function StampToolMobile() {
     () => selectedFrame.buildPrompt({ petKind, petKindOther, features }, gridSize),
     [selectedFrame, petKind, petKindOther, features, gridSize],
   );
+  const verticalLinePositions = useMemo(
+    () => safeCuts(verticalCuts, gridSize),
+    [verticalCuts, gridSize],
+  );
+  const horizontalLinePositions = useMemo(
+    () => safeCuts(horizontalCuts, gridSize),
+    [horizontalCuts, gridSize],
+  );
+  const resultCutGridStyle = useMemo(() => {
+    const xs = [0, ...verticalLinePositions, 100];
+    const ys = [0, ...horizontalLinePositions, 100];
+    const columns = Array.from({ length: gridSize }, (_, index) => xs[index + 1] - xs[index]);
+    const rows = Array.from({ length: gridSize }, (_, index) => ys[index + 1] - ys[index]);
+    return {
+      gridTemplateColumns: columns.map((size) => `${size}fr`).join(" "),
+      gridTemplateRows: rows.map((size) => `${size}fr`).join(" "),
+    };
+  }, [verticalLinePositions, horizontalLinePositions, gridSize]);
   const canCopy =
     petKind !== null && (petKind !== "その他" || petKindOther.trim().length > 0);
 
@@ -370,11 +390,25 @@ export default function StampToolMobile() {
     eraseStrokeOverridesRef.current = {};
   }
 
+  function setVerticalCutsState(next: number[], size: GridSize = gridSize) {
+    const safe = safeCuts(next, size);
+    verticalCutsRef.current = safe;
+    setVerticalCuts(safe);
+  }
+
+  function setHorizontalCutsState(next: number[], size: GridSize = gridSize) {
+    const safe = safeCuts(next, size);
+    horizontalCutsRef.current = safe;
+    setHorizontalCuts(safe);
+  }
+
   function resetCutLines(size: GridSize = gridSize) {
     const next = defaultCuts(size);
     verticalCutsRef.current = next;
     horizontalCutsRef.current = next;
     cutBoundsRef.current = null;
+    setVerticalCuts(next);
+    setHorizontalCuts(next);
     setCutBounds(null);
   }
 
@@ -383,6 +417,8 @@ export default function StampToolMobile() {
     verticalCutsRef.current = estimate.vertical;
     horizontalCutsRef.current = estimate.horizontal;
     cutBoundsRef.current = estimate.bounds;
+    setVerticalCuts(estimate.vertical);
+    setHorizontalCuts(estimate.horizontal);
     setCutBounds(estimate.bounds);
   }
 
@@ -393,7 +429,7 @@ export default function StampToolMobile() {
       setSheetSrc(null);
       setSplitMsg("");
       setSelectedIndex(0);
-      clearCellMoveDrag();
+      clearResultCutDrag();
       setCellOffsets({});
       setCropOverrideState({});
       clearManualCellSrcOverrides();
@@ -479,7 +515,7 @@ export default function StampToolMobile() {
     if (!sheetSrc) return;
     const jobId = ++splitJobRef.current;
     const keepIndex = Math.min(selectedIndex, Math.max(0, expectedCellCount - 1));
-    clearCellMoveDrag();
+    clearResultCutDrag();
     setProcessingSplit(true);
     setSplitMsg(options.message ?? "");
     try {
@@ -564,10 +600,9 @@ export default function StampToolMobile() {
     };
   }
 
-  function clearCellMoveDrag() {
-    cellMoveDragRef.current = null;
-    setMovingCellId(null);
-    setCellMovePreview(null);
+  function clearResultCutDrag() {
+    resultCutDragRef.current = null;
+    setResultCutDragging(null);
   }
 
   function cropOverrideFor(index: number): CellCropOverride {
@@ -612,7 +647,7 @@ export default function StampToolMobile() {
 
   function resetOffset() {
     if (!selectedCell) return;
-    clearCellMoveDrag();
+    clearResultCutDrag();
     setCellOffsets((current) => ({ ...current, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } }));
     const next = { ...cellCropOverridesRef.current };
     delete next[selectedIndex];
@@ -655,71 +690,74 @@ export default function StampToolMobile() {
   function transformFor(id: string) {
     const o = offsetFor(id);
     const scale = o.scale ?? 1;
-    const offsetTransform = !o.dx && !o.dy && scale === 1 ? undefined : `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
-    const cutPreviewTransform = cellMovePreview?.id === id ? cellMovePreview.transform : undefined;
-    const transforms = [offsetTransform, cutPreviewTransform].filter(Boolean);
-    return transforms.length ? transforms.join(" ") : undefined;
+    if (!o.dx && !o.dy && scale === 1) return undefined;
+    return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
   }
 
-  function startCellMove(event: ReactPointerEvent<HTMLButtonElement>, cell: SourceImage, index: number) {
+  function updateResultCutLine(axis: ResultCutDrag["axis"], index: number, value: number) {
+    const current = axis === "vertical" ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
+    current[index] = value;
+    if (axis === "vertical") setVerticalCutsState(current);
+    else setHorizontalCutsState(current);
+    const drag = resultCutDragRef.current;
+    if (drag) drag.latestCuts = axis === "vertical" ? verticalCutsRef.current : horizontalCutsRef.current;
+  }
+
+  function startResultCutDrag(event: ReactPointerEvent<HTMLButtonElement>, axis: ResultCutDrag["axis"], index: number) {
     if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (processingSplit) return;
+    if (processingSplit || !resultGridRef.current) return;
     event.preventDefault();
     event.stopPropagation();
     clearCropGesture();
-    setSelectedIndex(index);
-    const rect = event.currentTarget.getBoundingClientRect();
-    const startOverride = cropOverrideFor(index);
-    cellMoveDragRef.current = {
+    const rect = resultGridRef.current.getBoundingClientRect();
+    const startCuts = axis === "vertical" ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
+    resultCutDragRef.current = {
+      axis,
       pointerId: event.pointerId,
-      cellId: cell.id,
       index,
       startX: event.clientX,
       startY: event.clientY,
       width: Math.max(1, rect.width),
       height: Math.max(1, rect.height),
-      startOverride,
-      latestOverride: startOverride,
+      startCuts,
+      latestCuts: startCuts,
       moved: false,
     };
-    setMovingCellId(cell.id);
-    setCellMovePreview({ id: cell.id, transform: "translate(0px, 0px)" });
-    setCellOffsets((current) => ({ ...current, [cell.id]: { dx: 0, dy: 0, scale: 1 } }));
+    setResultCutDragging({ axis, index });
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.setPointerCapture(event.pointerId);
     }
   }
 
-  function moveCellMove(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = cellMoveDragRef.current;
+  function moveResultCutDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = resultCutDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    const dxPx = event.clientX - drag.startX;
-    const dyPx = event.clientY - drag.startY;
-    if (Math.hypot(dxPx, dyPx) > 2) drag.moved = true;
-    const draft = normalizeCropOverride({
-      ...drag.startOverride,
-      shiftX: (drag.startOverride.shiftX ?? 0) - (dxPx / drag.width) * 8,
-      shiftY: (drag.startOverride.shiftY ?? 0) - (dyPx / drag.height) * 8,
-    });
-    drag.latestOverride = draft ?? emptyCropOverride();
-    setCellMovePreview({
-      id: drag.cellId,
-      transform: `translate(${dxPx.toFixed(1)}px, ${dyPx.toFixed(1)}px)`,
-    });
+    const delta =
+      drag.axis === "vertical"
+        ? ((event.clientX - drag.startX) / drag.width) * 100
+        : ((event.clientY - drag.startY) / drag.height) * 100;
+    if (Math.abs(delta) > 0.2) drag.moved = true;
+    updateResultCutLine(drag.axis, drag.index, drag.startCuts[drag.index] + delta);
   }
 
-  function finishCellMove(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = cellMoveDragRef.current;
+  function finishResultCutDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = resultCutDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    if (drag.moved) applyCropOverride(drag.index, drag.latestOverride);
-    clearCellMoveDrag();
+    if (drag.moved) {
+      clearManualCellSrcOverrides();
+      eraseSourceRef.current = null;
+      eraseTargetIndexRef.current = null;
+      setCellOffsets({});
+      void regenerateSplitCells(cellCropOverridesRef.current, { message: "" });
+    }
+    clearResultCutDrag();
   }
 
   function previewTransformFor(id: string) {
@@ -1008,7 +1046,7 @@ export default function StampToolMobile() {
 
   async function changeGridSize(size: GridSize) {
     setSelectedIndex(0);
-    clearCellMoveDrag();
+    clearResultCutDrag();
     setCropOverrideState({});
     clearManualCellSrcOverrides();
     clearEraseStrokeOverrides();
@@ -1143,34 +1181,56 @@ export default function StampToolMobile() {
               </div>
 
               <div
-                className="vm-reorder-grid"
-                style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
+                ref={resultGridRef}
+                className={`vm-reorder-grid${resultCutDragging ? " is-cut-dragging" : ""}`}
+                style={resultCutGridStyle}
               >
                 {splitCells.map((cell, index) => {
                   const isSelected = index === selectedIndex;
-                  const isMoving = movingCellId === cell.id;
                   const isAdjusted = hasCropOverride(index);
                   return (
                     <button
                       key={cell.id}
                       type="button"
-                      className={`vm-reorder-cell${bgClass(splitBgPreview)}${isSelected ? " is-selected" : ""}${isAdjusted ? " is-crop-adjusted" : ""}${isMoving ? " is-moving" : ""}`}
-                      onPointerDown={(event) => startCellMove(event, cell, index)}
-                      onPointerMove={moveCellMove}
-                      onPointerUp={finishCellMove}
-                      onPointerCancel={finishCellMove}
+                      className={`vm-reorder-cell${bgClass(splitBgPreview)}${isSelected ? " is-selected" : ""}${isAdjusted ? " is-crop-adjusted" : ""}`}
                       onClick={() => {
                         clearCropGesture();
                         setSelectedIndex(index);
                       }}
-                      aria-label={`${index + 1}番を選択。ドラッグでカット位置調整`}
+                      aria-label={`${index + 1}番を選択`}
                     >
                       <span className="vm-reorder-cell-num">{index + 1}</span>
                       <img src={cell.src} alt={cell.name} style={{ transform: transformFor(cell.id) }} />
-                      {isAdjusted && <span className="vm-crop-badge">カット</span>}
+                      {isAdjusted && <span className="vm-crop-badge">補正</span>}
                     </button>
                   );
                 })}
+                {verticalLinePositions.map((pct, index) => (
+                  <button
+                    key={`result-cut-v-${index}`}
+                    type="button"
+                    className={`vm-result-cut-handle vertical${resultCutDragging?.axis === "vertical" && resultCutDragging.index === index ? " is-active" : ""}`}
+                    style={{ left: `${pct}%` }}
+                    aria-label={`縦の分割線${index + 1}を動かす`}
+                    onPointerDown={(event) => startResultCutDrag(event, "vertical", index)}
+                    onPointerMove={moveResultCutDrag}
+                    onPointerUp={finishResultCutDrag}
+                    onPointerCancel={finishResultCutDrag}
+                  />
+                ))}
+                {horizontalLinePositions.map((pct, index) => (
+                  <button
+                    key={`result-cut-h-${index}`}
+                    type="button"
+                    className={`vm-result-cut-handle horizontal${resultCutDragging?.axis === "horizontal" && resultCutDragging.index === index ? " is-active" : ""}`}
+                    style={{ top: `${pct}%` }}
+                    aria-label={`横の分割線${index + 1}を動かす`}
+                    onPointerDown={(event) => startResultCutDrag(event, "horizontal", index)}
+                    onPointerMove={moveResultCutDrag}
+                    onPointerUp={finishResultCutDrag}
+                    onPointerCancel={finishResultCutDrag}
+                  />
+                ))}
               </div>
 
               <label className={`vm-transparent-toggle vm-transparent-after-split${transparentEnabled ? " is-on" : ""}`}>

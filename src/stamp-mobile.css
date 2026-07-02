@@ -381,16 +381,24 @@
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.9);
 }
 
-/* ── 並び替えグリッド（タッチ用） ──────────────── */
+/* ── 分割結果グリッド（境界ドラッグで再カット） ──────────────── */
 .vm-reorder-grid {
+  position: relative;
   display: grid;
   gap: 8px;
   margin-top: 10px;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  touch-action: pan-y;
+  user-select: none;
 }
 .vm-reorder-cell {
   appearance: none;
   position: relative;
-  aspect-ratio: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
   background: repeating-conic-gradient(#f0e0eb 0deg 90deg, #fff 90deg 180deg) 0 0 / 12px 12px;
   border: 2px solid var(--vm-line);
   border-radius: 10px;
@@ -400,7 +408,7 @@
   justify-content: center;
   padding: 0;
   cursor: pointer;
-  touch-action: none;
+  touch-action: manipulation;
 }
 .vm-reorder-cell.bg-white,
 .vm-edit-preview.bg-white {
@@ -432,23 +440,6 @@
   border-color: var(--vm-pink);
   box-shadow: 0 0 0 3px var(--vm-pink-soft);
 }
-.vm-reorder-cell.is-selected::after {
-  content: "";
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  z-index: 4;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  border: 1px solid rgba(227, 110, 160, 0.4);
-  background:
-    linear-gradient(var(--vm-pink), var(--vm-pink)) center / 11px 2px no-repeat,
-    linear-gradient(var(--vm-pink), var(--vm-pink)) center / 2px 11px no-repeat,
-    rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 8px rgba(227, 110, 160, 0.18);
-  pointer-events: none;
-}
 .vm-reorder-cell.is-crop-adjusted {
   border-style: solid;
   border-color: var(--vm-purple);
@@ -456,17 +447,52 @@
 .vm-reorder-cell.is-dragging {
   opacity: 0.45;
 }
-.vm-reorder-cell.is-moving {
-  cursor: grabbing;
-  z-index: 4;
-  box-shadow: 0 10px 22px rgba(227, 110, 160, 0.28);
+.vm-result-cut-handle {
+  appearance: none;
+  position: absolute;
+  z-index: 7;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  opacity: 0;
+  touch-action: none;
 }
-.vm-reorder-cell.is-moving::after {
-  border-color: rgba(227, 110, 160, 0.75);
-  box-shadow: 0 4px 12px rgba(227, 110, 160, 0.3);
+.vm-result-cut-handle.vertical {
+  top: 0;
+  bottom: 0;
+  width: 34px;
+  transform: translateX(-50%);
+  cursor: col-resize;
 }
-.vm-reorder-cell.is-moving img {
-  transition: none;
+.vm-result-cut-handle.horizontal {
+  left: 0;
+  right: 0;
+  height: 34px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+.vm-result-cut-handle.is-active {
+  opacity: 1;
+}
+.vm-result-cut-handle.is-active::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(47, 27, 61, 0.16);
+}
+.vm-result-cut-handle.vertical.is-active::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 8px;
+  transform: translateX(-50%);
+}
+.vm-result-cut-handle.horizontal.is-active::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 8px;
+  transform: translateY(-50%);
 }
 .vm-reorder-cell-num {
   position: absolute;
