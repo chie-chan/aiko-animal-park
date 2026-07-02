@@ -12,13 +12,16 @@ import StampMonitorPromptPage from "./StampMonitorPromptPage";
 import StampFactoryPage from "./StampFactoryPage";
 
 const NOTE_HOME_URL = "https://note.com/aiko_animal";
-const STAMP_TOOL_PATHS = new Set(["/stamp", "/stamp-room", "/stamp-room-trial", "/stamp-mobile", "/stamp-monitor-20260629", "/stamp-factory"]);
+// 旧PC版URLの一時再公開: 2026-07-09 23:59:59 JST まで。
+const TEMP_STAMP_V2_OPEN_UNTIL_MS = Date.parse("2026-07-09T14:59:59.999Z");
+const STAMP_TOOL_PATHS = new Set(["/stamp", "/stamp-v2", "/stamp-room", "/stamp-room-trial", "/stamp-mobile", "/stamp-monitor-20260629", "/stamp-factory"]);
 
 export default function App() {
   const location = useLocation();
   const galleryTab = new URLSearchParams(location.search).get("tab") === "works" ? "works" : "catalog";
   const isGalleryRoute = location.pathname === "/gallery" || location.pathname === "/gallery.html";
   const isStampToolRoute = STAMP_TOOL_PATHS.has(location.pathname);
+  const isTempStampV2Open = Date.now() <= TEMP_STAMP_V2_OPEN_UNTIL_MS;
 
   return (
     <div className={`app-shell standalone-tool-shell${isStampToolRoute ? " stamp-tool-only-shell" : ""}`}>
@@ -70,7 +73,7 @@ export default function App() {
         <Route path="/stamp" element={<Navigate to="/stamp-room" replace />} />
         <Route path="/stamp-room" element={<StampToolV2 />} />
         <Route path="/stamp-room-trial" element={<StampToolV2 mode="trial" />} />
-        <Route path="/stamp-v2" element={<Navigate to="/gallery?tab=catalog" replace />} />
+        <Route path="/stamp-v2" element={isTempStampV2Open ? <StampToolV2 /> : <Navigate to="/gallery?tab=catalog" replace />} />
         <Route path="/stamp-v2-admin" element={<StampAnalyticsAdmin />} />
         <Route path="/stamp-mobile" element={<StampToolMobile />} />
         <Route path="/stamp-monitor-20260629" element={<StampMonitorPromptPage />} />
