@@ -16,10 +16,13 @@ import {
   type SourceImage,
   centerDominantImageContent,
   centerImageContent,
+  clamp,
   defaultCuts,
   eraseImageAtPoints,
+  linePosition,
   makeImageTransparent,
   readFileAsDataUrl,
+  safeCuts,
   splitSheetImage,
 } from "./stamp-v2-split";
 import { FRAME_DESIGNS, type FrameDesign, type PetKind, type PetKindOrNone } from "./stamp-v2-frames";
@@ -70,6 +73,12 @@ type CropGesture = {
   height: number;
   draft: CellCropOverride;
   changed: boolean;
+};
+
+type CutDrag = {
+  axis: "vertical" | "horizontal";
+  index: number;
+  pointerId: number;
 };
 
 const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
@@ -123,7 +132,11 @@ export default function StampToolMobile() {
   const [dragActive, setDragActive] = useState(false);
   const [cellCropOverrides, setCellCropOverrides] = useState<Record<number, CellCropOverride>>({});
   const [splitBgPreview, setSplitBgPreview] = useState<MobileBgPreview>("checker");
+  const [verticalCuts, setVerticalCuts] = useState<number[]>(() => defaultCuts(3));
+  const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(3));
+  const [cutDrag, setCutDrag] = useState<CutDrag | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const splitCutPreviewRef = useRef<HTMLDivElement>(null);
   const editPreviewRef = useRef<HTMLDivElement>(null);
   const eraseBusyRef = useRef(false);
   const eraseQueueRef = useRef<EraseStroke[]>([]);
@@ -139,6 +152,8 @@ export default function StampToolMobile() {
   const cellCropOverridesRef = useRef<Record<number, CellCropOverride>>({});
   const manualCellSrcOverridesRef = useRef<Record<number, string>>({});
   const eraseStrokeOverridesRef = useRef<Record<number, EraseStroke[]>>({});
+  const verticalCutsRef = useRef<number[]>(defaultCuts(3));
+  const horizontalCutsRef = useRef<number[]>(defaultCuts(3));
   const splitJobRef = useRef(0);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -167,6 +182,14 @@ export default function StampToolMobile() {
   const generatedPrompt = useMemo(
     () => selectedFrame.buildPrompt({ petKind, petKindOther, features }, gridSize),
     [selectedFrame, petKind, petKindOther, features, gridSize],
+  );
+  const verticalLinePositions = useMemo(
+    () => safeCuts(verticalCuts, gridSize).map((cut) => linePosition(cut, 0)),
+    [verticalCuts, gridSize],
+  );
+  const horizontalLinePositions = useMemo(
+    () => safeCuts(horizontalCuts, gridSize).map((cut) => linePosition(cut, 0)),
+    [horizontalCuts, gridSize],
   );
   const canCopy =
     petKind !== null && (petKind !== "その他" || petKindOther.trim().length > 0);
@@ -234,6 +257,27 @@ export default function StampToolMobile() {
     eraseStrokeOverridesRef.current = {};
   }
 
+  function setVerticalCutsState(next: number[], size: GridSize = gridSize) {
+    const safe = safeCuts(next, size);
+    verticalCutsRef.current = safe;
+    setVerticalCuts(safe);
+  }
+
+  function setHorizontalCutsState(next: number[], size: GridSize = gridSize) {
+    const safe = safeCuts(next, size);
+    horizontalCutsRef.current = safe;
+    setHorizontalCuts(safe);
+  }
+
+  function resetCutLines(size: GridSize = gridSize) {
+    const next = defaultCuts(size);
+    verticalCutsRef.current = next;
+    horizontalCutsRef.current = next;
+    setVerticalCuts(next);
+    setHorizontalCuts(next);
+    setCutDrag(null);
+  }
+
   async function handleFile(files: FileList | null) {
     if (!files || !files[0]) return;
     try {
@@ -246,6 +290,7 @@ export default function StampToolMobile() {
       setCropOverrideState({});
       clearManualCellSrcOverrides();
       clearEraseStrokeOverrides();
+      resetCutLines();
     } catch (err) {
       console.error(err);
       setSplitMsg("画像の読み込みに失敗しました。");
@@ -266,10 +311,19 @@ export default function StampToolMobile() {
   async function buildSplitCells(overrides: Record<number, CellCropOverride>, jobId = splitJobRef.current) {
     if (!sheetSrc) return [];
     const isCurrentJob = () => splitJobRef.current === jobId;
-    const cuts = defaultCuts(gridSize);
-    const cells = await splitSheetImage(sheetSrc, 0, 0, cuts, cuts, gridSize, gridSize, overrides, {
+    const cells = await splitSheetImage(
+      sheetSrc,
+      0,
+      0,
+      verticalCutsRef.current,
+      horizontalCutsRef.current,
+      gridSize,
+      gridSize,
+      overrides,
+      {
       preserveCropSize: true,
-    });
+      },
+    );
     let nextCells = cells.map((cell, index) => ({
       ...cell,
       id: `mobile-cell-${index}`,
@@ -437,6 +491,42 @@ export default function StampToolMobile() {
       padX: (current.padX ?? 0) + delta,
       padY: (current.padY ?? 0) + delta,
     });
+  }
+
+  function updateCutLine(axis: CutDrag["axis"], index: number, value: number) {
+    const cuts = axis === "vertical" ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
+    cuts[index] = clamp(value, 4, 96);
+    if (axis === "vertical") setVerticalCutsState(cuts);
+    else setHorizontalCutsState(cuts);
+  }
+
+  function startCutLineDrag(event: ReactPointerEvent<HTMLButtonElement>, axis: CutDrag["axis"], index: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (processingSplit || !splitCutPreviewRef.current) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setCutDrag({ axis, index, pointerId: event.pointerId });
+  }
+
+  function moveCutLineDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!cutDrag || cutDrag.pointerId !== event.pointerId || !splitCutPreviewRef.current) return;
+    event.preventDefault();
+    const rect = splitCutPreviewRef.current.getBoundingClientRect();
+    const value =
+      cutDrag.axis === "vertical"
+        ? ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100
+        : ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100;
+    updateCutLine(cutDrag.axis, cutDrag.index, value);
+  }
+
+  function finishCutLineDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!cutDrag || cutDrag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    setCutDrag(null);
+    clearManualCellSrcOverrides();
+    eraseSourceRef.current = null;
+    eraseTargetIndexRef.current = null;
+    void regenerateSplitCells(cellCropOverridesRef.current, { message: "" });
   }
 
   function resetOffset() {
@@ -777,6 +867,7 @@ export default function StampToolMobile() {
     setCropOverrideState({});
     clearManualCellSrcOverrides();
     clearEraseStrokeOverrides();
+    resetCutLines(size);
     setCellOffsets({});
   }
 
@@ -795,12 +886,6 @@ export default function StampToolMobile() {
   function handleDragLeave() {
     setDragActive(false);
   }
-
-  const busyMessage = transparencyBusy
-    ? "透過中..."
-    : processingSplit
-      ? "分割中..."
-      : splitMsg;
 
   return (
     <div className="vm-shell">
@@ -875,17 +960,7 @@ export default function StampToolMobile() {
             onChange={(e) => handleFile(e.target.files)}
           />
 
-          {sheetSrc && (
-            <div className="vm-source-preview">
-              <img src={sheetSrc} alt="取り込んだ画像" />
-            </div>
-          )}
-
-          {(transparencyBusy || processingSplit || splitMsg) && (
-            <p className={`vm-inline-msg${splitMsg.includes("失敗") ? " is-error" : ""}`}>
-              {busyMessage}
-            </p>
-          )}
+          {splitMsg.includes("失敗") && <p className="vm-inline-msg is-error">{splitMsg}</p>}
         </section>
 
         {splitCells.length === 0 && !processingSplit && (
@@ -901,9 +976,6 @@ export default function StampToolMobile() {
               <div className="vm-split-head">
                 <div>
                   <h3 className="vm-card-title">分割画像</h3>
-                  <p className="vm-card-sub">
-                    {splitCells.length}個にカット済み。修正したいコマをタップしてください。
-                  </p>
                 </div>
                 <div className="vm-split-tools">
                   <div className="vm-bg-picker" role="group" aria-label="背景色プレビュー">
@@ -921,6 +993,38 @@ export default function StampToolMobile() {
                   <span className="vm-split-count">{splitCells.length}個</span>
                 </div>
               </div>
+
+              {sheetSrc && (
+                <div
+                  ref={splitCutPreviewRef}
+                  className={`vm-cut-preview${cutDrag ? " is-dragging" : ""}`}
+                  onPointerMove={moveCutLineDrag}
+                  onPointerUp={finishCutLineDrag}
+                  onPointerCancel={finishCutLineDrag}
+                >
+                  <img src={sheetSrc} alt="カット調整" draggable={false} />
+                  {verticalLinePositions.map((pct, index) => (
+                    <button
+                      key={`cut-v-${index}`}
+                      type="button"
+                      className="vm-cut-line vertical"
+                      style={{ left: `${pct}%` }}
+                      aria-label={`縦のカット線${index + 1}`}
+                      onPointerDown={(event) => startCutLineDrag(event, "vertical", index)}
+                    />
+                  ))}
+                  {horizontalLinePositions.map((pct, index) => (
+                    <button
+                      key={`cut-h-${index}`}
+                      type="button"
+                      className="vm-cut-line horizontal"
+                      style={{ top: `${pct}%` }}
+                      aria-label={`横のカット線${index + 1}`}
+                      onPointerDown={(event) => startCutLineDrag(event, "horizontal", index)}
+                    />
+                  ))}
+                </div>
+              )}
 
               <div
                 className="vm-reorder-grid"
