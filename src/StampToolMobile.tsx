@@ -82,6 +82,19 @@ type CutDrag = {
   pointerId: number;
 };
 
+type CellMoveDrag = {
+  pointerId: number;
+  cellId: string;
+  index: number;
+  startX: number;
+  startY: number;
+  width: number;
+  height: number;
+  startOffset: CellOffset;
+  latestOffset: CellOffset;
+  moved: boolean;
+};
+
 type CutLineEstimate = {
   vertical: number[];
   horizontal: number[];
@@ -111,6 +124,19 @@ function normalizeCropOverride(next: CellCropOverride): CellCropOverride | null 
     Math.abs(normalized.padY ?? 0) > 0.05 ||
     Math.abs(normalized.zoom ?? 0) > 0.05;
   return active ? normalized : null;
+}
+
+function normalizeCellOffset(next: CellOffset): CellOffset {
+  return {
+    dx: clamp(next.dx ?? 0, -45, 45),
+    dy: clamp(next.dy ?? 0, -45, 45),
+    scale: clamp(next.scale ?? 1, 0.65, 1.8),
+  };
+}
+
+function hasVisibleCellOffset(offset: CellOffset | undefined): boolean {
+  if (!offset) return false;
+  return Math.abs(offset.dx ?? 0) > 0.1 || Math.abs(offset.dy ?? 0) > 0.1 || Math.abs((offset.scale ?? 1) - 1) > 0.01;
 }
 
 function bgClass(bg: MobileBgPreview): string {
@@ -260,6 +286,7 @@ export default function StampToolMobile() {
   const eraserPointerIdRef = useRef<number | null>(null);
   const cropGestureRef = useRef<CropGesture | null>(null);
   const cropPointersRef = useRef<Map<number, GesturePoint>>(new Map());
+  const cellMoveDragRef = useRef<CellMoveDrag | null>(null);
   // ピンチ/パンのプレビュー更新を1フレーム1回に間引く（毎pointermoveのsetStateを避けてなめらかに）
   const cropRafRef = useRef<number | null>(null);
   const cropLatestPointsRef = useRef<GesturePoint[]>([]);
@@ -280,6 +307,8 @@ export default function StampToolMobile() {
   const [centerBusy, setCenterBusy] = useState(false);
   const [cropGesturing, setCropGesturing] = useState(false);
   const [gesturePreviewTransform, setGesturePreviewTransform] = useState<string | undefined>();
+  const [cellMovePreview, setCellMovePreview] = useState<{ id: string; offset: CellOffset } | null>(null);
+  const [movingCellId, setMovingCellId] = useState<string | null>(null);
 
   useEffect(() => {
     if (showDesignRoom) setDrStep(1);
@@ -423,6 +452,7 @@ export default function StampToolMobile() {
       setSheetSrc(null);
       setSplitMsg("");
       setSelectedIndex(0);
+      clearCellMoveDrag();
       setCellOffsets({});
       setCropOverrideState({});
       clearManualCellSrcOverrides();
@@ -508,6 +538,7 @@ export default function StampToolMobile() {
     if (!sheetSrc) return;
     const jobId = ++splitJobRef.current;
     const keepIndex = Math.min(selectedIndex, Math.max(0, expectedCellCount - 1));
+    clearCellMoveDrag();
     setProcessingSplit(true);
     setSplitMsg(options.message ?? "");
     try {
@@ -592,6 +623,21 @@ export default function StampToolMobile() {
     };
   }
 
+  function visualOffsetFor(id: string): CellOffset {
+    if (cellMovePreview?.id === id) return cellMovePreview.offset;
+    return offsetFor(id);
+  }
+
+  function clearCellMoveDrag() {
+    cellMoveDragRef.current = null;
+    setMovingCellId(null);
+    setCellMovePreview(null);
+  }
+
+  function hasCellOffset(id: string) {
+    return hasVisibleCellOffset(cellOffsets[id]);
+  }
+
   function cropOverrideFor(index: number): CellCropOverride {
     return { shiftX: 0, shiftY: 0, padX: 0, padY: 0, zoom: 0, ...(cellCropOverridesRef.current[index] ?? {}) };
   }
@@ -670,7 +716,8 @@ export default function StampToolMobile() {
 
   function resetOffset() {
     if (!selectedCell) return;
-    setCellOffsets({ ...cellOffsets, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } });
+    clearCellMoveDrag();
+    setCellOffsets((current) => ({ ...current, [selectedCell.id]: { dx: 0, dy: 0, scale: 1 } }));
     const next = { ...cellCropOverridesRef.current };
     delete next[selectedIndex];
     clearEraseStrokeOverride(selectedIndex);
@@ -710,10 +757,72 @@ export default function StampToolMobile() {
   }
 
   function transformFor(id: string) {
-    const o = offsetFor(id);
+    const o = visualOffsetFor(id);
     const scale = o.scale ?? 1;
     if (!o.dx && !o.dy && scale === 1) return undefined;
     return `translate(${o.dx}%, ${o.dy}%) scale(${scale})`;
+  }
+
+  function startCellMove(event: ReactPointerEvent<HTMLButtonElement>, cell: SourceImage, index: number) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (processingSplit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearCropGesture();
+    setSelectedIndex(index);
+    const rect = event.currentTarget.getBoundingClientRect();
+    const startOffset = normalizeCellOffset(offsetFor(cell.id));
+    cellMoveDragRef.current = {
+      pointerId: event.pointerId,
+      cellId: cell.id,
+      index,
+      startX: event.clientX,
+      startY: event.clientY,
+      width: Math.max(1, rect.width),
+      height: Math.max(1, rect.height),
+      startOffset,
+      latestOffset: startOffset,
+      moved: false,
+    };
+    setMovingCellId(cell.id);
+    setCellMovePreview({ id: cell.id, offset: startOffset });
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+  }
+
+  function moveCellMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = cellMoveDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const dxPx = event.clientX - drag.startX;
+    const dyPx = event.clientY - drag.startY;
+    if (Math.hypot(dxPx, dyPx) > 2) drag.moved = true;
+    const next = normalizeCellOffset({
+      dx: drag.startOffset.dx + (dxPx / drag.width) * 100,
+      dy: drag.startOffset.dy + (dyPx / drag.height) * 100,
+      scale: drag.startOffset.scale ?? 1,
+    });
+    drag.latestOffset = next;
+    setCellMovePreview({ id: drag.cellId, offset: next });
+  }
+
+  function finishCellMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = cellMoveDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (drag.moved) {
+      setCellOffsets((current) => ({
+        ...current,
+        [drag.cellId]: drag.latestOffset,
+      }));
+    }
+    clearCellMoveDrag();
   }
 
   function previewTransformFor(id: string) {
@@ -1002,6 +1111,7 @@ export default function StampToolMobile() {
 
   async function changeGridSize(size: GridSize) {
     setSelectedIndex(0);
+    clearCellMoveDrag();
     setCropOverrideState({});
     clearManualCellSrcOverrides();
     clearEraseStrokeOverrides();
@@ -1180,20 +1290,27 @@ export default function StampToolMobile() {
               >
                 {splitCells.map((cell, index) => {
                   const isSelected = index === selectedIndex;
+                  const isMoving = movingCellId === cell.id;
+                  const isPositionAdjusted = hasCellOffset(cell.id);
+                  const isAdjusted = hasCropOverride(index) || isPositionAdjusted;
                   return (
                     <button
                       key={cell.id}
                       type="button"
-                      className={`vm-reorder-cell${bgClass(splitBgPreview)}${isSelected ? " is-selected" : ""}${hasCropOverride(index) ? " is-crop-adjusted" : ""}`}
+                      className={`vm-reorder-cell${bgClass(splitBgPreview)}${isSelected ? " is-selected" : ""}${isAdjusted ? " is-crop-adjusted" : ""}${isMoving ? " is-moving" : ""}`}
+                      onPointerDown={(event) => startCellMove(event, cell, index)}
+                      onPointerMove={moveCellMove}
+                      onPointerUp={finishCellMove}
+                      onPointerCancel={finishCellMove}
                       onClick={() => {
                         clearCropGesture();
                         setSelectedIndex(index);
                       }}
-                      aria-label={`${index + 1}番を選択`}
+                      aria-label={`${index + 1}番を選択。ドラッグで位置調整`}
                     >
                       <span className="vm-reorder-cell-num">{index + 1}</span>
                       <img src={cell.src} alt={cell.name} style={{ transform: transformFor(cell.id) }} />
-                      {hasCropOverride(index) && <span className="vm-crop-badge">補正</span>}
+                      {isAdjusted && <span className="vm-crop-badge">{hasCropOverride(index) ? "補正" : "位置"}</span>}
                     </button>
                   );
                 })}
