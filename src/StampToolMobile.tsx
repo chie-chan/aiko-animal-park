@@ -95,6 +95,9 @@ type CutLineEstimate = {
   bounds: CropBounds | null;
 };
 
+// この距離(px)未満の指移動は「タップ」とみなし、カット線を動かさず下のセル選択に回す
+const RESULT_CUT_DRAG_THRESHOLD_PX = 6;
+
 const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
   { kind: "犬", emoji: "🐶", label: "犬" },
   { kind: "猫", emoji: "🐱", label: "猫" },
@@ -734,12 +737,36 @@ export default function StampToolMobile() {
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
+    // 6px のデッドゾーン内は「タップ」扱いにして線を一切動かさない
+    // （微小な指ブレでカット線が勝手にズレたり、再カットが走るのを防ぐ）
+    const movedPx =
+      drag.axis === "vertical"
+        ? Math.abs(event.clientX - drag.startX)
+        : Math.abs(event.clientY - drag.startY);
+    if (!drag.moved && movedPx <= RESULT_CUT_DRAG_THRESHOLD_PX) return;
+    drag.moved = true;
     const delta =
       drag.axis === "vertical"
         ? ((event.clientX - drag.startX) / drag.width) * 100
         : ((event.clientY - drag.startY) / drag.height) * 100;
-    if (Math.abs(delta) > 0.2) drag.moved = true;
     updateResultCutLine(drag.axis, drag.index, drag.startCuts[drag.index] + delta);
+  }
+
+  // ハンドルの真下にあるセルを選択する（当たり判定がセル選択タップを奪わないための透過処理）
+  function selectCellAtPoint(clientX: number, clientY: number) {
+    const gridEl = resultGridRef.current;
+    if (!gridEl || typeof document === "undefined") return;
+    const cellEl = document
+      .elementsFromPoint(clientX, clientY)
+      .find(
+        (el): el is HTMLElement =>
+          el instanceof HTMLElement && el.classList.contains("vm-reorder-cell"),
+      );
+    if (!cellEl) return;
+    const idx = Array.from(gridEl.querySelectorAll(".vm-reorder-cell")).indexOf(cellEl);
+    if (idx < 0) return;
+    clearCropGesture();
+    setSelectedIndex(idx);
   }
 
   function finishResultCutDrag(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -756,6 +783,9 @@ export default function StampToolMobile() {
       eraseTargetIndexRef.current = null;
       setCellOffsets({});
       void regenerateSplitCells(cellCropOverridesRef.current, { message: "" });
+    } else {
+      // 動かさず離した＝タップ。真下のセルを選択する
+      selectCellAtPoint(event.clientX, event.clientY);
     }
     clearResultCutDrag();
   }

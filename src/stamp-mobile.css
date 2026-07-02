@@ -454,20 +454,44 @@
   border: 0;
   padding: 0;
   background: transparent;
-  opacity: 0;
   touch-action: none;
+}
+/* カット線自体は描かず、中点に小さなグリップだけ薄く出して「掴める場所」を示す */
+.vm-result-cut-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: rgba(47, 27, 61, 0.34);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
+  opacity: 0.5;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.vm-result-cut-handle.vertical::before {
+  width: 5px;
+  height: 28px;
+}
+.vm-result-cut-handle.horizontal::before {
+  width: 28px;
+  height: 5px;
+}
+.vm-result-cut-handle.is-active::before {
+  opacity: 0;
 }
 .vm-result-cut-handle.vertical {
   top: 0;
   bottom: 0;
-  width: 34px;
+  width: 26px;
   transform: translateX(-50%);
   cursor: col-resize;
 }
 .vm-result-cut-handle.horizontal {
   left: 0;
   right: 0;
-  height: 34px;
+  height: 26px;
   transform: translateY(-50%);
   cursor: row-resize;
 }
