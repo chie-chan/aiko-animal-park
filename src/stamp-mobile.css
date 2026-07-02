@@ -291,6 +291,8 @@
 .vm-cut-preview {
   position: relative;
   margin-top: 10px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
   border: 1.5px solid var(--vm-line);
   border-radius: 12px;
   overflow: hidden;
@@ -301,11 +303,18 @@
 .vm-cut-preview img {
   display: block;
   width: 100%;
-  max-height: 260px;
+  height: 100%;
   object-fit: contain;
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+}
+.vm-cut-bounds {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid rgba(227, 110, 160, 0.48);
+  border-radius: 8px;
+  pointer-events: none;
 }
 .vm-cut-line {
   appearance: none;

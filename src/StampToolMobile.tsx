@@ -11,6 +11,7 @@ import "./stamp-mobile.css";
 import {
   type CellCropOverride,
   type CellOffset,
+  type CropBounds,
   type EraseStroke,
   type GridSize,
   type SourceImage,
@@ -19,7 +20,7 @@ import {
   clamp,
   defaultCuts,
   eraseImageAtPoints,
-  linePosition,
+  loadImage,
   makeImageTransparent,
   readFileAsDataUrl,
   safeCuts,
@@ -81,6 +82,12 @@ type CutDrag = {
   pointerId: number;
 };
 
+type CutLineEstimate = {
+  vertical: number[];
+  horizontal: number[];
+  bounds: CropBounds | null;
+};
+
 const PET_KIND_OPTIONS: { kind: PetKind; emoji: string; label: string }[] = [
   { kind: "犬", emoji: "🐶", label: "犬" },
   { kind: "猫", emoji: "🐱", label: "猫" },
@@ -110,6 +117,112 @@ function bgClass(bg: MobileBgPreview): string {
   return bg === "checker" ? "" : ` bg-${bg}`;
 }
 
+async function estimateContentCutLines(src: string, size: GridSize): Promise<CutLineEstimate> {
+  const fallback = defaultCuts(size);
+  const fallbackEstimate = { vertical: fallback, horizontal: fallback, bounds: null };
+  try {
+    const image = await loadImage(src);
+    const sourceW = image.naturalWidth || image.width;
+    const sourceH = image.naturalHeight || image.height;
+    if (!sourceW || !sourceH) return fallbackEstimate;
+
+    const scale = Math.min(1, 520 / Math.max(sourceW, sourceH));
+    const w = Math.max(1, Math.round(sourceW * scale));
+    const h = Math.max(1, Math.round(sourceH * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return fallbackEstimate;
+    ctx.drawImage(image, 0, 0, w, h);
+
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    const total = w * h;
+    let transparentPixels = 0;
+    for (let i = 0; i < total; i += 1) {
+      if (data[i * 4 + 3] <= 12) transparentPixels += 1;
+    }
+    const hasTransparentBackground = transparentPixels > total * 0.02;
+
+    const cornerSize = Math.max(2, Math.round(Math.min(w, h) * 0.025));
+    let bgR = 0;
+    let bgG = 0;
+    let bgB = 0;
+    let bgCount = 0;
+    const addBgSample = (x0: number, y0: number) => {
+      for (let y = y0; y < Math.min(h, y0 + cornerSize); y += 1) {
+        for (let x = x0; x < Math.min(w, x0 + cornerSize); x += 1) {
+          const o = (y * w + x) * 4;
+          if (data[o + 3] <= 12) continue;
+          bgR += data[o];
+          bgG += data[o + 1];
+          bgB += data[o + 2];
+          bgCount += 1;
+        }
+      }
+    };
+    addBgSample(0, 0);
+    addBgSample(Math.max(0, w - cornerSize), 0);
+    addBgSample(0, Math.max(0, h - cornerSize));
+    addBgSample(Math.max(0, w - cornerSize), Math.max(0, h - cornerSize));
+    const bg = bgCount
+      ? { r: bgR / bgCount, g: bgG / bgCount, b: bgB / bgCount }
+      : { r: 255, g: 255, b: 255 };
+
+    let minX = w;
+    let maxX = -1;
+    let minY = h;
+    let maxY = -1;
+    let contentPixels = 0;
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const o = (y * w + x) * 4;
+        const a = data[o + 3];
+        if (a <= 12) continue;
+        const dr = data[o] - bg.r;
+        const dg = data[o + 1] - bg.g;
+        const db = data[o + 2] - bg.b;
+        const colorDistance = Math.sqrt(dr * dr + dg * dg + db * db);
+        const isContent = hasTransparentBackground || colorDistance > 28;
+        if (!isContent) continue;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        contentPixels += 1;
+      }
+    }
+
+    if (contentPixels < total * 0.005 || maxX <= minX || maxY <= minY) {
+      return fallbackEstimate;
+    }
+
+    const rawLeft = (minX / w) * 100;
+    const rawRight = ((maxX + 1) / w) * 100;
+    const rawTop = (minY / h) * 100;
+    const rawBottom = ((maxY + 1) / h) * 100;
+    const padX = Math.max(1.2, (rawRight - rawLeft) * 0.025);
+    const padY = Math.max(1.2, (rawBottom - rawTop) * 0.025);
+    const left = clamp(rawLeft - padX, 0, 96);
+    const right = clamp(rawRight + padX, left + 4, 100);
+    const top = clamp(rawTop - padY, 0, 96);
+    const bottom = clamp(rawBottom + padY, top + 4, 100);
+    const contentW = right - left;
+    const contentH = bottom - top;
+    if (contentW > 96 && contentH > 96) return fallbackEstimate;
+
+    return {
+      vertical: fallback,
+      horizontal: fallback,
+      bounds: { left, right, top, bottom },
+    };
+  } catch (err) {
+    console.warn("Failed to estimate mobile stamp cut lines", err);
+    return fallbackEstimate;
+  }
+}
+
 export default function StampToolMobile() {
   const [showDesignRoom, setShowDesignRoom] = useState(false);
   const [drStep, setDrStep] = useState<1 | 2 | 3 | 4>(1);
@@ -134,6 +247,7 @@ export default function StampToolMobile() {
   const [splitBgPreview, setSplitBgPreview] = useState<MobileBgPreview>("checker");
   const [verticalCuts, setVerticalCuts] = useState<number[]>(() => defaultCuts(3));
   const [horizontalCuts, setHorizontalCuts] = useState<number[]>(() => defaultCuts(3));
+  const [cutBounds, setCutBounds] = useState<CropBounds | null>(null);
   const [cutDrag, setCutDrag] = useState<CutDrag | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const splitCutPreviewRef = useRef<HTMLDivElement>(null);
@@ -154,6 +268,7 @@ export default function StampToolMobile() {
   const eraseStrokeOverridesRef = useRef<Record<number, EraseStroke[]>>({});
   const verticalCutsRef = useRef<number[]>(defaultCuts(3));
   const horizontalCutsRef = useRef<number[]>(defaultCuts(3));
+  const cutBoundsRef = useRef<CropBounds | null>(null);
   const splitJobRef = useRef(0);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -184,12 +299,18 @@ export default function StampToolMobile() {
     [selectedFrame, petKind, petKindOther, features, gridSize],
   );
   const verticalLinePositions = useMemo(
-    () => safeCuts(verticalCuts, gridSize).map((cut) => linePosition(cut, 0)),
-    [verticalCuts, gridSize],
+    () => {
+      const bounds = cutBounds ?? { left: 0, right: 100, top: 0, bottom: 100 };
+      return safeCuts(verticalCuts, gridSize).map((cut) => bounds.left + ((bounds.right - bounds.left) * cut) / 100);
+    },
+    [verticalCuts, gridSize, cutBounds],
   );
   const horizontalLinePositions = useMemo(
-    () => safeCuts(horizontalCuts, gridSize).map((cut) => linePosition(cut, 0)),
-    [horizontalCuts, gridSize],
+    () => {
+      const bounds = cutBounds ?? { left: 0, right: 100, top: 0, bottom: 100 };
+      return safeCuts(horizontalCuts, gridSize).map((cut) => bounds.top + ((bounds.bottom - bounds.top) * cut) / 100);
+    },
+    [horizontalCuts, gridSize, cutBounds],
   );
   const canCopy =
     petKind !== null && (petKind !== "その他" || petKindOther.trim().length > 0);
@@ -273,8 +394,21 @@ export default function StampToolMobile() {
     const next = defaultCuts(size);
     verticalCutsRef.current = next;
     horizontalCutsRef.current = next;
+    cutBoundsRef.current = null;
     setVerticalCuts(next);
     setHorizontalCuts(next);
+    setCutBounds(null);
+    setCutDrag(null);
+  }
+
+  async function applyEstimatedCutLines(src: string, size: GridSize = gridSize) {
+    const estimate = await estimateContentCutLines(src, size);
+    verticalCutsRef.current = estimate.vertical;
+    horizontalCutsRef.current = estimate.horizontal;
+    cutBoundsRef.current = estimate.bounds;
+    setVerticalCuts(estimate.vertical);
+    setHorizontalCuts(estimate.horizontal);
+    setCutBounds(estimate.bounds);
     setCutDrag(null);
   }
 
@@ -282,7 +416,6 @@ export default function StampToolMobile() {
     if (!files || !files[0]) return;
     try {
       const url = await readFileAsDataUrl(files[0]);
-      setRawSheetSrc(url);
       setSheetSrc(null);
       setSplitMsg("");
       setSelectedIndex(0);
@@ -290,7 +423,8 @@ export default function StampToolMobile() {
       setCropOverrideState({});
       clearManualCellSrcOverrides();
       clearEraseStrokeOverrides();
-      resetCutLines();
+      await applyEstimatedCutLines(url, gridSize);
+      setRawSheetSrc(url);
     } catch (err) {
       console.error(err);
       setSplitMsg("画像の読み込みに失敗しました。");
@@ -321,7 +455,8 @@ export default function StampToolMobile() {
       gridSize,
       overrides,
       {
-      preserveCropSize: true,
+        preserveCropSize: true,
+        cropBounds: cutBoundsRef.current,
       },
     );
     let nextCells = cells.map((cell, index) => ({
@@ -495,7 +630,13 @@ export default function StampToolMobile() {
 
   function updateCutLine(axis: CutDrag["axis"], index: number, value: number) {
     const cuts = axis === "vertical" ? [...verticalCutsRef.current] : [...horizontalCutsRef.current];
-    cuts[index] = clamp(value, 4, 96);
+    const bounds = cutBoundsRef.current;
+    const relativeValue = bounds
+      ? axis === "vertical"
+        ? ((value - bounds.left) / Math.max(1, bounds.right - bounds.left)) * 100
+        : ((value - bounds.top) / Math.max(1, bounds.bottom - bounds.top)) * 100
+      : value;
+    cuts[index] = clamp(relativeValue, 4, 96);
     if (axis === "vertical") setVerticalCutsState(cuts);
     else setHorizontalCutsState(cuts);
   }
@@ -861,14 +1002,16 @@ export default function StampToolMobile() {
     event.preventDefault();
   }
 
-  function changeGridSize(size: GridSize) {
-    setGridSize(size);
+  async function changeGridSize(size: GridSize) {
     setSelectedIndex(0);
     setCropOverrideState({});
     clearManualCellSrcOverrides();
     clearEraseStrokeOverrides();
-    resetCutLines(size);
     setCellOffsets({});
+    const source = rawSheetSrc ?? sheetSrc;
+    if (source) await applyEstimatedCutLines(source, size);
+    else resetCutLines(size);
+    setGridSize(size);
   }
 
   function handleDrop(event: DragEvent<HTMLButtonElement>) {
@@ -1003,6 +1146,17 @@ export default function StampToolMobile() {
                   onPointerCancel={finishCutLineDrag}
                 >
                   <img src={sheetSrc} alt="カット調整" draggable={false} />
+                  {cutBounds && (
+                    <span
+                      className="vm-cut-bounds"
+                      style={{
+                        left: `${cutBounds.left}%`,
+                        top: `${cutBounds.top}%`,
+                        width: `${cutBounds.right - cutBounds.left}%`,
+                        height: `${cutBounds.bottom - cutBounds.top}%`,
+                      }}
+                    />
+                  )}
                   {verticalLinePositions.map((pct, index) => (
                     <button
                       key={`cut-v-${index}`}

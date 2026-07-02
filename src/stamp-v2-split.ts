@@ -94,6 +94,13 @@ export interface CellCropOverride {
   zoom?: number;
 }
 
+export interface CropBounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
 /**
  * セル画像を指定サイズに収めて透過PNGとして書き出す（中央寄せ、余白は透過）。
  * offset を渡すと、中央位置から指定% だけずらし、必要なら拡大して描画する。
@@ -519,22 +526,25 @@ export async function splitSheetImage(
   gridCols: GridSize = 4,
   gridRows: GridSize = 4,
   cellOverrides: Record<number, CellCropOverride> = {},
-  options: { preserveCropSize?: boolean } = {},
+  options: { preserveCropSize?: boolean; cropBounds?: CropBounds | null } = {},
 ): Promise<SourceImage[]> {
   const image = await loadImage(src);
   const preserveCropSize = options.preserveCropSize ?? false;
-  const left = outerPadding;
-  const right = 100 - outerPadding;
-  const top = outerPadding;
-  const bottom = 100 - outerPadding;
+  const bounds = options.cropBounds;
+  const left = bounds ? clamp(bounds.left, 0, 99) : outerPadding;
+  const right = bounds ? clamp(bounds.right, left + 1, 100) : 100 - outerPadding;
+  const top = bounds ? clamp(bounds.top, 0, 99) : outerPadding;
+  const bottom = bounds ? clamp(bounds.bottom, top + 1, 100) : 100 - outerPadding;
+  const xRange = right - left;
+  const yRange = bottom - top;
   const xBoundaries = [
     left,
-    ...safeCuts(verticalCuts, gridCols).map((cut) => linePosition(cut, outerPadding)),
+    ...safeCuts(verticalCuts, gridCols).map((cut) => left + (xRange * cut) / 100),
     right,
   ];
   const yBoundaries = [
     top,
-    ...safeCuts(horizontalCuts, gridRows).map((cut) => linePosition(cut, outerPadding)),
+    ...safeCuts(horizontalCuts, gridRows).map((cut) => top + (yRange * cut) / 100),
     bottom,
   ];
   const trimX = image.width * (trimGutter / 100) * 0.5;
