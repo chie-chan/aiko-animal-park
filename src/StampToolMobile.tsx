@@ -29,6 +29,7 @@ import {
   splitSheetImage,
 } from "./stamp-v2-split";
 import { FRAME_DESIGNS, type FrameDesign, type PetKind, type PetKindOrNone } from "./stamp-v2-frames";
+import { trackStampEvent } from "./stamp-v2-analytics";
 import Step3MobileSave from "./Step3MobileSave";
 
 const GRID_OPTIONS: { size: GridSize; label: string; count: number }[] = [
@@ -324,6 +325,10 @@ export default function StampToolMobile() {
     if (showDesignRoom) setDrStep(1);
   }, [showDesignRoom]);
 
+  useEffect(() => {
+    trackStampEvent("page_view", { tool: "stamp-mobile" });
+  }, []);
+
   const expectedCellCount = gridSize * gridSize;
   const gridLabel = `${gridSize}×${gridSize}`;
   const selectedCell = splitCells[selectedIndex] ?? null;
@@ -386,6 +391,12 @@ export default function StampToolMobile() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2200);
     }
+    trackStampEvent("mobile_prompt_copy", {
+      tool: "stamp-mobile",
+      gridSize,
+      frame: selectedFrameId,
+      petKind: petKind ?? "none",
+    });
   }
 
   function setCropOverrideState(next: Record<number, CellCropOverride>) {
@@ -481,6 +492,13 @@ export default function StampToolMobile() {
       clearEraseStrokeOverrides();
       await applyEstimatedCutLines(url, gridSize);
       setRawSheetSrc(url);
+      trackStampEvent("import_complete", {
+        tool: "stamp-mobile",
+        mode: "mobile_sheet",
+        gridSize,
+        cellCount: gridSize * gridSize,
+        fileType: files[0].type || "unknown",
+      });
     } catch (err) {
       console.error(err);
       setSplitMsg("画像の読み込みに失敗しました。");
@@ -695,6 +713,12 @@ export default function StampToolMobile() {
       shiftX: (current.shiftX ?? 0) + dx,
       shiftY: (current.shiftY ?? 0) + dy,
     });
+    trackStampEvent("placement_nudge", {
+      tool: "stamp-mobile",
+      directionX: dx,
+      directionY: dy,
+      cellIndex: selectedIndex + 1,
+    });
   }
 
   function expandCrop(delta: number) {
@@ -702,6 +726,11 @@ export default function StampToolMobile() {
     updateSelectedCropOverride({
       padX: (current.padX ?? 0) + delta,
       padY: (current.padY ?? 0) + delta,
+    });
+    trackStampEvent("placement_zoom", {
+      tool: "stamp-mobile",
+      delta,
+      cellIndex: selectedIndex + 1,
     });
   }
 
@@ -715,6 +744,10 @@ export default function StampToolMobile() {
     clearManualCellSrcOverride(selectedIndex);
     setCropOverrideState(next);
     void regenerateSplitCells(next, { message: "個別補正をリセットしています..." });
+    trackStampEvent("placement_reset", {
+      tool: "stamp-mobile",
+      cellIndex: selectedIndex + 1,
+    });
   }
 
   async function centerSelectedContent() {
@@ -739,6 +772,10 @@ export default function StampToolMobile() {
       if (eraseTargetIndexRef.current === targetIndex) {
         eraseSourceRef.current = nextSrc;
       }
+      trackStampEvent("mobile_center", {
+        tool: "stamp-mobile",
+        cellIndex: targetIndex + 1,
+      });
     } catch (err) {
       console.error(err);
       setSplitMsg("中央寄せに失敗しました。");
@@ -839,6 +876,13 @@ export default function StampToolMobile() {
       eraseTargetIndexRef.current = null;
       setCellOffsets({});
       void regenerateSplitCells(cellCropOverridesRef.current, { message: "" });
+      trackStampEvent("mobile_cut_line_move", {
+        tool: "stamp-mobile",
+        axis: drag.axis,
+        lineIndex: drag.index + 1,
+        gridSize,
+        cellCount: splitCells.length,
+      });
     }
     clearSheetCutDrag();
   }
@@ -1121,6 +1165,11 @@ export default function StampToolMobile() {
     eraserPointerIdRef.current = null;
     lastErasePointRef.current = null;
     setErasing(false);
+    trackStampEvent("mobile_eraser", {
+      tool: "stamp-mobile",
+      cellIndex: selectedIndex + 1,
+      radius: eraserRadius,
+    });
   }
 
   function preventPreviewTouch(event: ReactTouchEvent<HTMLDivElement>) {
@@ -1162,9 +1211,19 @@ export default function StampToolMobile() {
     clearManualCellSrcOverrides();
     clearEraseStrokeOverrides();
     setSplitMsg(`${base + renamed.length}個たまりました。次のシート画像を入れてください。`);
+    trackStampEvent("mobile_stock_add", {
+      tool: "stamp-mobile",
+      added: renamed.length,
+      total: base + renamed.length,
+      gridSize,
+    });
   }
 
   function clearStock() {
+    trackStampEvent("mobile_stock_clear", {
+      tool: "stamp-mobile",
+      total: stockCells.length,
+    });
     setStockCells([]);
     setStockOffsets({});
     setSplitMsg("");
@@ -1181,6 +1240,22 @@ export default function StampToolMobile() {
     if (source) await applyEstimatedCutLines(source, size);
     else resetCutLines(size);
     setGridSize(size);
+    trackStampEvent("step_view", {
+      tool: "stamp-mobile",
+      step: "grid_change",
+      gridSize: size,
+      cellCount: size * size,
+    });
+  }
+
+  function changeTransparencyEnabled(enabled: boolean) {
+    setTransparentEnabled(enabled);
+    trackStampEvent("background_auto", {
+      tool: "stamp-mobile",
+      enabled,
+      gridSize,
+      cellCount: splitCells.length || gridSize * gridSize,
+    });
   }
 
   function handleDrop(event: DragEvent<HTMLButtonElement>) {
@@ -1408,7 +1483,7 @@ export default function StampToolMobile() {
                   type="checkbox"
                   checked={transparentEnabled}
                   disabled={transparencyBusy}
-                  onChange={(e) => setTransparentEnabled(e.target.checked)}
+                  onChange={(e) => changeTransparencyEnabled(e.target.checked)}
                 />
                 <span>自動透過</span>
                 <small>分割後の各コマに、PC版と同じ白背景透過をかけます</small>

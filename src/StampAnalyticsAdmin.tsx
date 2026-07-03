@@ -23,9 +23,19 @@ type UserRow = {
   isReturning: boolean;
   topEvents: CountItem[];
 };
+type ToolUsageRow = {
+  path: string;
+  events: number;
+  visitors: number;
+  sessions: number;
+  downloads: number;
+  promptCopies: number;
+  imports: number;
+};
 type RecentEvent = {
   event: string;
   at: string;
+  path?: string;
   visitorLabel: string;
   meta: Record<string, string | number | boolean | null>;
 };
@@ -42,8 +52,10 @@ type AnalyticsResponse = {
     promptCopies: number;
     sheetImports: number;
     batchImports: number;
+    mobileImports?: number;
   };
   topEvents: CountItem[];
+  toolUsage?: ToolUsageRow[];
   daily: DailyRow[];
   users: UserRow[];
   recentEvents: RecentEvent[];
@@ -69,8 +81,20 @@ const EVENT_LABELS: Record<string, string> = {
   export_zip: "ZIPダウンロード",
 };
 
+const MOBILE_EVENT_LABELS: Record<string, string> = {
+  mobile_prompt_copy: "Mobile prompt copy",
+  mobile_cut_line_move: "Mobile cut line move",
+  mobile_center: "Mobile center",
+  mobile_eraser: "Mobile eraser",
+  mobile_stock_add: "Mobile sheet append",
+  mobile_stock_clear: "Mobile stock clear",
+  mobile_share_all: "Mobile save all",
+  mobile_share_one: "Mobile share one",
+  mobile_download_one: "Mobile save one",
+};
+
 function labelEvent(key: string) {
-  return EVENT_LABELS[key] || key;
+  return EVENT_LABELS[key] || MOBILE_EVENT_LABELS[key] || key;
 }
 
 function fmtDateTime(value: string) {
@@ -88,6 +112,14 @@ function fmtDateTime(value: string) {
 function pct(value: number, total: number) {
   if (!total) return "0%";
   return `${Math.round((value / total) * 100)}%`;
+}
+
+function labelPath(path: string) {
+  if (path === "/stamp-room") return "PC /stamp-room";
+  if (path === "/stamp-mobile") return "Mobile /stamp-mobile";
+  if (path === "/stamp-v2") return "Old V2 /stamp-v2";
+  if (path === "/stamp-room-trial") return "Trial /stamp-room-trial";
+  return path || "-";
 }
 
 export default function StampAnalyticsAdmin() {
@@ -180,10 +212,26 @@ export default function StampAnalyticsAdmin() {
             <Metric label="セッション" value={data.summary.sessions} />
             <Metric label="ZIP保存" value={data.summary.downloads} sub={`利用者比 ${pct(data.summary.downloads, data.summary.visitors)}`} />
             <Metric label="プロンプトコピー" value={data.summary.promptCopies} />
-            <Metric label="取り込み" value={data.summary.sheetImports + data.summary.batchImports} sub={`シート ${data.summary.sheetImports} / 40枚 ${data.summary.batchImports}`} />
+            <Metric label="取り込み" value={data.summary.sheetImports + data.summary.batchImports + (data.summary.mobileImports ?? 0)} sub={`PC ${data.summary.sheetImports + data.summary.batchImports} / Mobile ${data.summary.mobileImports ?? 0}`} />
           </section>
 
           <section className="stamp-admin-grid">
+            <Panel title="Tool / URL">
+              <div className="stamp-admin-rank">
+                {(data.toolUsage ?? []).map((item) => (
+                  <div key={item.path} className="stamp-admin-tool-row">
+                    <div>
+                      <strong>{labelPath(item.path)}</strong>
+                      <small>
+                        {item.visitors} users / {item.sessions} sessions / {item.imports} imports / {item.downloads} saves
+                      </small>
+                    </div>
+                    <span>{item.events}</span>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+
             <Panel title="よく使われた機能">
               <div className="stamp-admin-rank">
                 {data.topEvents.map((item) => (
@@ -248,7 +296,7 @@ export default function StampAnalyticsAdmin() {
                 <div key={`${event.at}-${index}`} className="stamp-admin-event-row">
                   <span>{fmtDateTime(event.at)}</span>
                   <strong>{labelEvent(event.event)}</strong>
-                  <small>{event.visitorLabel}</small>
+                  <small>{labelPath(event.path || "")} / {event.visitorLabel}</small>
                 </div>
               ))}
             </div>

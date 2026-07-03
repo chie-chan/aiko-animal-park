@@ -4,6 +4,7 @@ import {
   type SourceImage,
   renderCellToSize,
 } from "./stamp-v2-split";
+import { trackStampEvent } from "./stamp-v2-analytics";
 
 // ======================================================================
 // Step3MobileSave ―  モバイル向けカメラロール保存UI
@@ -129,6 +130,10 @@ export default function Step3MobileSave(props: Props) {
         title: "うちのこスタンプ",
         text: `分割済み画像${prepared.length}枚です。`,
       });
+      trackStampEvent("mobile_share_all", {
+        tool: "stamp-mobile",
+        cellCount: allFiles.length,
+      });
       setMessage("共有シートから「画像を保存」を選ぶとカメラロールに入ります。");
     } catch (err: any) {
       // ユーザーキャンセルは無視
@@ -145,6 +150,10 @@ export default function Step3MobileSave(props: Props) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    trackStampEvent("mobile_download_one", {
+      tool: "stamp-mobile",
+      fileName: p.fileName,
+    });
   }
 
   async function shareOne(p: PreparedFile) {
@@ -152,6 +161,10 @@ export default function Step3MobileSave(props: Props) {
       try {
         const file = new File([p.blob], p.fileName, { type: "image/png" });
         await navigator.share({ files: [file], title: p.fileName });
+        trackStampEvent("mobile_share_one", {
+          tool: "stamp-mobile",
+          fileName: p.fileName,
+        });
         return;
       } catch (err: any) {
         if (err && err.name === "AbortError") return;

@@ -223,8 +223,12 @@ export default function StampToolV2({ mode = "full" }: StampToolV2Props) {
   const [placementSavedAt, setPlacementSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    trackStampEvent("page_view", { tool: "stamp-v2" });
-  }, []);
+    const path = window.location.pathname;
+    trackStampEvent("page_view", {
+      tool: path === "/stamp-mobile" ? "stamp-mobile" : path === "/stamp-room" ? "stamp-room" : "stamp-v2",
+      mode: isTrialMode ? "trial" : "full",
+    });
+  }, [isTrialMode]);
 
   useEffect(() => {
     trackStampEvent("step_view", {

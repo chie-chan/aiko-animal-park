@@ -163,6 +163,40 @@
   color: #2c8798;
 }
 
+.stamp-admin-tool-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border-bottom: 1px solid #f1e8f0;
+  font-size: 13px;
+}
+
+.stamp-admin-tool-row div {
+  min-width: 0;
+}
+
+.stamp-admin-tool-row strong,
+.stamp-admin-tool-row small {
+  display: block;
+}
+
+.stamp-admin-tool-row strong {
+  color: #2d2340;
+}
+
+.stamp-admin-tool-row small {
+  margin-top: 2px;
+  color: #756476;
+  font-size: 11.5px;
+}
+
+.stamp-admin-tool-row > span {
+  color: #2c8798;
+  font-weight: 900;
+}
+
 .stamp-admin-daily {
   display: grid;
   gap: 6px;
