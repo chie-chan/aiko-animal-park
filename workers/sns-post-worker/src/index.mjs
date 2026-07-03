@@ -18,6 +18,23 @@ function text(value, max = 5000) {
   return String(value || "").trim().slice(0, max);
 }
 
+// テキスト添付内の「書き換える箇所」=【…】(記入欄) を自動でハイライト(マーカー)する
+// styling span を返す。offset/length は Threads 仕様に合わせ **UTF-8バイト** 基準。
+// (UTF-16基準だと日本語混じりでズレて Threads が 500 を返す。2026-07-02 実機検証で確定)
+function highlightBracketSpans(plaintext) {
+  const spans = [];
+  const re = /【[^】]*】/g;
+  const enc = new TextEncoder();
+  let m;
+  while ((m = re.exec(plaintext)) !== null) {
+    const offset = enc.encode(plaintext.slice(0, m.index)).length;
+    const length = enc.encode(m[0]).length;
+    spans.push({offset, length, styling_info: ["highlight"]});
+    if (spans.length >= 50) break;
+  }
+  return spans;
+}
+
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload, null, 2), {
     status,
@@ -189,6 +206,8 @@ function normalizeQueueDoc(raw = {}, id = "") {
     sourceDocId: item.sourceDocId || queueId,
     text: bodyText,
     replyText: text(item.replyText, 2000),
+    // 配布プロンプト等をThreadsリプの「テキスト添付」カードに載せる長文（最大1万字）。
+    replyTextAttachment: text(item.replyTextAttachment, 10000),
     platforms,
     targetAccount: text(item.targetAccount, 100) || "@aiko.animal",
     targetAccounts: normalizedTargets,
@@ -393,15 +412,26 @@ async function publishThreads(env, post, imageUrls) {
     access_token: token,
   }).catch(() => ({id: published.id}));
   const replyText = text(post.replyText, 2000);
+  // 配布プロンプト等を Threads の text_attachment カードとしてリプに載せる（本文500字制限を超えて最大1万字）。
+  const replyAttachment = text(post.replyTextAttachment, 10000);
   let replyId = "";
   let replyError = "";
-  if (replyText) {
+  if (replyText || replyAttachment) {
     try {
-      const replyCreationId = await createThreadsContainer(user.id, token, {
-        text: replyText,
+      const replyParams = {
+        // text_attachment は media_type=TEXT の投稿にしか付けられないが、リプは元々TEXTなので両立する。
+        text: replyText || "▶ 作り方プロンプト（コピーして使ってね）",
         media_type: "TEXT",
         reply_to_id: published.id,
-      }, "reply");
+      };
+      if (replyAttachment) {
+        const attach = {plaintext: replyAttachment.slice(0, 10000)};
+        // 書き換える箇所(【…】)を自動でマーカー(highlight)する。
+        const spans = highlightBracketSpans(attach.plaintext);
+        if (spans.length) attach.text_with_styling_info = spans;
+        replyParams.text_attachment = JSON.stringify(attach);
+      }
+      const replyCreationId = await createThreadsContainer(user.id, token, replyParams, "reply");
       const replyPublished = await publishThreadsContainer(user.id, token, replyCreationId, "reply");
       replyId = String(replyPublished.id || "");
     } catch (error) {
@@ -416,7 +446,7 @@ async function publishThreads(env, post, imageUrls) {
     mediaType: String(media.media_type || ""),
     replyId,
     replyError,
-    replyRequested: Boolean(replyText),
+    replyRequested: Boolean(replyText || replyAttachment),
     mediaCount: postContainer.mediaCount,
     isCarousel: postContainer.mediaCount > 1,
     username: String(media.username || user.username),
