@@ -203,6 +203,7 @@ export default function StampAnalyticsAdmin() {
       </div>
 
       {error && <p className="stamp-admin-error">{error}</p>}
+      {loading && <p className="stamp-admin-loading">Loading analytics...</p>}
 
       {data && (
         <>

@@ -15,18 +15,47 @@ async function listJson(kv, prefix, max = 5000) {
   do {
     const page = await kv.list({prefix, cursor, limit: 1000});
     cursor = page.cursor;
-    for (const key of page.keys || []) {
-      if (rows.length >= max) break;
-      const raw = await kv.get(key.name);
-      if (!raw) continue;
+    const names = (page.keys || []).map((key) => key.name).slice(0, Math.max(0, max - rows.length));
+    const raws = await Promise.all(names.map((name) => kv.get(name)));
+    for (const raw of raws) {
       try {
-        rows.push(JSON.parse(raw));
+        if (raw) rows.push(JSON.parse(raw));
       } catch {
         // Ignore corrupt analytics rows.
       }
     }
   } while (cursor && rows.length < max);
   return rows;
+}
+
+async function getJson(kv, key) {
+  const raw = await kv.get(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function listEventsForDays(kv, days, max = 12000) {
+  const rows = [];
+  for (const date of dayRange(days)) {
+    if (rows.length >= max) break;
+    const daily = await listJson(kv, `${EVENT_PREFIX}${date}:`, max - rows.length);
+    rows.push(...daily);
+  }
+  return rows;
+}
+
+async function getUsersById(kv, visitorIds) {
+  const entries = await Promise.all(
+    Array.from(visitorIds).map(async (visitorId) => [
+      visitorId,
+      await getJson(kv, `${USER_PREFIX}${visitorId}`),
+    ]),
+  );
+  return new Map(entries);
 }
 
 function isoDaysAgo(days) {
@@ -111,10 +140,7 @@ export async function onRequest(context) {
   const days = Math.max(1, Math.min(180, Number(url.searchParams.get("days") || 30)));
   const sinceIso = isoDaysAgo(days);
 
-  const [allEvents, allUsers] = await Promise.all([
-    listJson(kv, EVENT_PREFIX),
-    listJson(kv, USER_PREFIX),
-  ]);
+  const allEvents = await listEventsForDays(kv, days);
   const events = allEvents
     .filter((event) => String(event.at || "") >= sinceIso)
     .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
@@ -181,7 +207,7 @@ export async function onRequest(context) {
     }
   }
 
-  const userById = new Map(allUsers.map((user) => [String(user.visitorId || ""), user]));
+  const userById = await getUsersById(kv, userRange.keys());
   const activeUsers = Array.from(userRange.values()).map((range) => {
     const user = userById.get(range.visitorId) || {};
     const firstSeen = String(user.firstSeen || range.lastSeen || "");
