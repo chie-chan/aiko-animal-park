@@ -30,6 +30,28 @@
   line-height: 1.2;
 }
 
+.stamp-admin-head p:not(.stamp-admin-kicker) {
+  margin: 8px 0 0;
+  max-width: 640px;
+  color: #756476;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.stamp-admin-local-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: #2c8798;
+  color: #fff;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .stamp-admin-auth {
   display: flex;
   gap: 8px;
