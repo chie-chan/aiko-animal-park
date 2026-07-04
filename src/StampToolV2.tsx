@@ -986,6 +986,9 @@ function DesignRoom(props: DesignRoomProps) {
   const [zoomFrameIndex, setZoomFrameIndex] = useState<number | null>(null);
   const [showAllFrames, setShowAllFrames] = useState<boolean>(false);
 
+  // あいこ版（VITE_UNLOCK_ALL_FRAMES=1）では Coming soon を解禁して全フレームを使えるようにする。
+  // 通常ビルド（＝デプロイ公開版）は false のままなので、お客さん向けは今まで通りゲートされる。
+  const unlockAll = import.meta.env.VITE_UNLOCK_ALL_FRAMES === "1";
   const featuredFrames = frames.filter((f) => f.featured);
   const otherFrames = frames.filter((f) => !f.featured);
 
@@ -1005,7 +1008,7 @@ function DesignRoom(props: DesignRoomProps) {
 
   const zoomedFrame = zoomFrameIndex !== null ? frames[zoomFrameIndex] : null;
   const canUseZoomedFrame = Boolean(
-    zoomedFrame && featuredFrames.some((frame) => frame.id === zoomedFrame.id),
+    zoomedFrame && (unlockAll || featuredFrames.some((frame) => frame.id === zoomedFrame.id)),
   );
   const stampTextTotal = gridSize * gridSize;
   const stampTextLineCount = stampTextDraft.split(/\r?\n/).filter((line) => line.trim()).length;
@@ -1055,7 +1058,9 @@ function DesignRoom(props: DesignRoomProps) {
             >
               {showAllFrames
                 ? `閉じる ▲`
-                : `▼ もっと見る（近日追加予定 ${otherFrames.length} 種類）`}
+                : unlockAll
+                  ? `▼ もっと見る（全 ${otherFrames.length} 種類）`
+                  : `▼ もっと見る（近日追加予定 ${otherFrames.length} 種類）`}
             </button>
           </div>
         )}
@@ -1064,12 +1069,16 @@ function DesignRoom(props: DesignRoomProps) {
         {showAllFrames && otherFrames.length > 0 && (
           <>
             <div className="v2-frame-section-head is-secondary">
-              <span className="v2-frame-section-label">その他のデザイン（Coming soon）</span>
+              <span className="v2-frame-section-label">
+                {unlockAll ? "その他のデザイン" : "その他のデザイン（Coming soon）"}
+              </span>
               <span className="v2-frame-section-divider" />
             </div>
-            <p className="v2-monitor-note">
-              無料モニター中はサムネイルのみ公開中です。プロンプト作成はおすすめ4種類から選んでください。
-            </p>
+            {!unlockAll && (
+              <p className="v2-monitor-note">
+                無料モニター中はサムネイルのみ公開中です。プロンプト作成はおすすめ4種類から選んでください。
+              </p>
+            )}
             <div className="v2-frame-list">
               {otherFrames.map((frame) => {
                 const idx = frames.findIndex((f) => f.id === frame.id);
@@ -1077,9 +1086,9 @@ function DesignRoom(props: DesignRoomProps) {
                   <FrameCard
                     key={frame.id}
                     frame={frame}
-                    isSelected={false}
-                    isLocked
-                    onSelect={() => undefined}
+                    isSelected={unlockAll && selectedFrameId === frame.id}
+                    isLocked={!unlockAll}
+                    onSelect={() => (unlockAll ? onSelectFrame(frame.id) : undefined)}
                     onZoom={() => setZoomFrameIndex(idx)}
                   />
                 );

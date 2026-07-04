@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "dev:aiko": "vite --mode aiko --port 5180",
+    "dev:mirror": "vite --port 5181",
     "build": "vite build",
+    "build:aiko": "vite build --mode aiko",
     "preview": "vite preview",
     "sync:works-gallery": "node scripts/sync-firebase-gallery-manifest-to-park.mjs",
     "check:sns-worker": "node --check workers/sns-post-worker/src/index.mjs && node --check workers/sns-post-worker/scripts/deploy-dry-run.mjs && node --check workers/sns-post-worker/scripts/deploy-live.mjs && node --check workers/sns-post-worker/scripts/deploy-safe.mjs && node workers/sns-post-worker/test/sns-post-worker.test.mjs",

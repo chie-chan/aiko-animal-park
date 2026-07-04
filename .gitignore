@@ -13,6 +13,8 @@ dist.bak-*/
 .env
 .env.*
 !.env.example
+# あいこ版フラグ（秘密情報なし・全フレーム解禁の目印）は追跡して移動でも消えないように
+!.env.aiko
 .dev.vars
 .dev.vars.*
 !.dev.vars.example

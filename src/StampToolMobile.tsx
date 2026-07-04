@@ -336,9 +336,11 @@ export default function StampToolMobile() {
   const gridLabel = `${gridSize}×${gridSize}`;
   const selectedCell = splitCells[selectedIndex] ?? null;
 
+  // あいこ版（VITE_UNLOCK_ALL_FRAMES=1）は全フレーム、公開版はおすすめ4種のみ
+  const unlockAll = import.meta.env.VITE_UNLOCK_ALL_FRAMES === "1";
   const mobileFrames = useMemo<FrameDesign[]>(
-    () => FRAME_DESIGNS.filter((f) => MOBILE_FEATURED_IDS.includes(f.id)),
-    [],
+    () => (unlockAll ? FRAME_DESIGNS : FRAME_DESIGNS.filter((f) => MOBILE_FEATURED_IDS.includes(f.id))),
+    [unlockAll],
   );
   const selectedFrame = mobileFrames.find((f) => f.id === selectedFrameId) ?? mobileFrames[0];
   const generatedPrompt = useMemo(
