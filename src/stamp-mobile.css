@@ -1658,3 +1658,41 @@
   padding: 2px 7px;
   border-radius: 999px;
 }
+
+/* ===== 白フチ（透過ON時のみ表示） ===== */
+.vm-outline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1.5px dashed var(--vm-line);
+  border-radius: 12px;
+}
+.vm-outline-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--vm-ink, #2f1b3d);
+}
+.vm-outline-row button {
+  appearance: none;
+  width: 36px;
+  height: 32px;
+  border: 1.5px solid var(--vm-line);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--vm-ink, #2f1b3d);
+  cursor: pointer;
+}
+.vm-outline-row button:disabled {
+  opacity: 0.4;
+}
+.vm-outline-value {
+  min-width: 52px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--vm-pink, #e95498);
+}

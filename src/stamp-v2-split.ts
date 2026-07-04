@@ -241,6 +241,69 @@ export interface CropBounds {
 }
 
 /**
+ * 透過画像の中身のまわりに白フチを付ける。
+ * 白シルエットを全方位（32方向×リング状）に少しずつずらして重ね描きする方式＝距離変換の近似。
+ * 単純な膨張処理で出る多角形のカクつきが出ず、角が丸く滑らかに仕上がる。
+ * @param widthPx フチの太さ(px)。0以下ならそのまま返す
+ */
+export async function addWhiteOutline(src: string, widthPx: number): Promise<string> {
+  if (widthPx <= 0) return src;
+  const img = await loadImage(src);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return src;
+
+  // 白シルエット（元画像のアルファ形状を白1色に）
+  const sil = document.createElement("canvas");
+  sil.width = w;
+  sil.height = h;
+  const sctx = sil.getContext("2d");
+  if (!sctx) return src;
+  sctx.drawImage(img, 0, 0);
+  sctx.globalCompositeOperation = "source-in";
+  sctx.fillStyle = "#ffffff";
+  sctx.fillRect(0, 0, w, h);
+
+  // フチがはみ出さないよう余白を足した出力キャンバス
+  const pad = Math.ceil(widthPx) + 1;
+  const out = document.createElement("canvas");
+  out.width = w + pad * 2;
+  out.height = h + pad * 2;
+  const ctx = out.getContext("2d");
+  if (!ctx) return src;
+
+  // 全方位×リング状にシルエットを重ね描き＝円形の均一オフセット
+  const angleSteps = 32;
+  const ringStep = Math.max(0.6, widthPx / 4);
+  for (let r = widthPx; r > 0; r -= ringStep) {
+    for (let a = 0; a < angleSteps; a += 1) {
+      const th = (a / angleSteps) * Math.PI * 2;
+      ctx.drawImage(sil, pad + Math.cos(th) * r, pad + Math.sin(th) * r);
+    }
+  }
+  ctx.drawImage(sil, pad, pad);
+  // 重ね描きで生じた半透明を白として固める（外周のアンチエイリアスは残す）
+  try {
+    const data = ctx.getImageData(0, 0, out.width, out.height);
+    const d = data.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] > 0) {
+        d[i] = 255;
+        d[i + 1] = 255;
+        d[i + 2] = 255;
+        if (d[i + 3] > 96) d[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(data, 0, 0);
+  } catch {
+    // getImageData不可でも重ね描きでほぼ不透明になっているのでそのまま
+  }
+  // 最後に元画像を上へ
+  ctx.drawImage(img, pad, pad);
+  return out.toDataURL("image/png");
+}
+
+/**
  * 出力キャンバスに軽いアンシャープマスクをかける（アップスケール時の眠さ対策）。
  * KMベイツ実績の「LANCZOS拡大＋UnsharpMask」のブラウザ版。透過(alpha)は触らない。
  */
@@ -357,6 +420,8 @@ export interface TransparentOptions {
   tolerance?: number;
   /** trueなら縁からつながる背景だけ消す。falseなら同系色を全域から消す。既定 true。 */
   contiguous?: boolean;
+  /** 透過後に半透明ダスト（最大アルファ<100の塊）を自動除去する。既定 true。 */
+  removeDust?: boolean;
 }
 
 export interface RgbColor {
@@ -446,6 +511,7 @@ export async function makeImageTransparent(
     for (let i = 0; i < n; i += 1) {
       if (cand[i]) data[i * 4 + 3] = 0;
     }
+    if (opts.removeDust ?? true) removeFaintDust(data, w, h);
     ctx.putImageData(imageData, 0, 0);
     return canvas.toDataURL("image/png");
   }
@@ -483,8 +549,84 @@ export async function makeImageTransparent(
   for (let i = 0; i < n; i += 1) {
     if (visited[i]) data[i * 4 + 3] = 0;
   }
+  if (opts.removeDust ?? true) removeFaintDust(data, w, h);
   ctx.putImageData(imageData, 0, 0);
   return canvas.toDataURL("image/png");
+}
+
+/**
+ * 透過後に残るダストを除去する（KMベイツ仕上げ術のブラウザ移植＋JPEGノイズ対策）。
+ * アルファ>8 の連結成分ごとに調べて、次のどちらかに当てはまる塊だけ透明化する：
+ *  1. 最大アルファ<100 ＝ 一度も濃くならない半透明ゴースト
+ *  2. 小さくて白っぽい浮遊粒 ＝ JPEG圧縮ノイズで白判定を逃れた白背景の残りカス
+ * 文字の白い中身や瞳のハイライトは本体（輪郭）と連結して大きな成分になるので消えない。
+ * キラキラ・紙吹雪などの色付き装飾は彩度があるので残る。
+ */
+export function removeFaintDust(data: Uint8ClampedArray, w: number, h: number) {
+  const n = w * h;
+  const visited = new Uint8Array(n);
+  const stack = new Int32Array(n);
+  const members = new Int32Array(n);
+  // 「小さい」の基準は画像サイズに比例（1254pxシートで約390px、セル単位でも最低64px）
+  const smallMax = Math.max(64, Math.round(n * 0.00025));
+  for (let start = 0; start < n; start += 1) {
+    if (visited[start]) continue;
+    const a0 = data[start * 4 + 3];
+    if (a0 <= 8) {
+      // ほぼ見えない孤立画素はその場で掃除
+      if (a0 > 0) data[start * 4 + 3] = 0;
+      visited[start] = 1;
+      continue;
+    }
+    let sp = 0;
+    let mc = 0;
+    let maxA = 0;
+    let sumR = 0;
+    let sumG = 0;
+    let sumB = 0;
+    visited[start] = 1;
+    stack[sp] = start;
+    sp += 1;
+    while (sp > 0) {
+      sp -= 1;
+      const idx = stack[sp];
+      members[mc] = idx;
+      mc += 1;
+      const o = idx * 4;
+      const a = data[o + 3];
+      if (a > maxA) maxA = a;
+      sumR += data[o];
+      sumG += data[o + 1];
+      sumB += data[o + 2];
+      const x = idx % w;
+      const y = (idx / w) | 0;
+      for (let ny = y - 1; ny <= y + 1; ny += 1) {
+        if (ny < 0 || ny >= h) continue;
+        for (let nx = x - 1; nx <= x + 1; nx += 1) {
+          if (nx < 0 || nx >= w || (nx === x && ny === y)) continue;
+          const next = ny * w + nx;
+          if (!visited[next] && data[next * 4 + 3] > 8) {
+            visited[next] = 1;
+            stack[sp] = next;
+            sp += 1;
+          }
+        }
+      }
+    }
+    let remove = maxA < 100; // ルール1: 半透明ゴースト
+    if (!remove && mc <= smallMax) {
+      // ルール2: 小さくて白っぽい浮遊粒（平均色で判定）
+      const r = sumR / mc;
+      const g = sumG / mc;
+      const b = sumB / mc;
+      const mx = r > g ? (r > b ? r : b) : g > b ? g : b;
+      const mn = r < g ? (r < b ? r : b) : g < b ? g : b;
+      if (mx >= 228 && mx - mn <= 26) remove = true;
+    }
+    if (remove) {
+      for (let i = 0; i < mc; i += 1) data[members[i] * 4 + 3] = 0;
+    }
+  }
 }
 
 export async function pickImageColor(

@@ -4,6 +4,7 @@ import {
   type GridSize,
   type SheetProfiles,
   type SourceImage,
+  addWhiteOutline,
   buildSheetProfiles,
   centerImageContent,
   clamp,
@@ -195,6 +196,9 @@ export default function Step2Splitter(props: Props) {
   const dragBoundsRef = useRef<HTMLElement | null>(null);
   // シートの列/行プロファイル（カット線を余白の谷へ自動フィット/吸着させる用）
   const sheetProfilesRef = useRef<SheetProfiles | null>(null);
+  // 白フチ: 現在の太さ(px)と「フチを付ける前」のセルのスナップショット（幅変更時はここから掛け直す）
+  const [outlineWidth, setOutlineWidth] = useState(0);
+  const outlineBaseRef = useRef<SourceImage[] | null>(null);
   const splitCellsRef = useRef<SourceImage[]>(splitCells);
   const batchEditIndexRef = useRef<number | null>(null);
   const eraseSourceRef = useRef<string | null>(null);
@@ -460,6 +464,7 @@ export default function Step2Splitter(props: Props) {
     setBgTransparent(false);
     setSheetSrc(url);
     setMessage("");
+    resetOutlineState();
     // カット線をコマ間の余白（谷）へ自動フィット（谷が無いシートは等間隔のまま）
     void autoFitCutsForSheet(url);
   }
@@ -779,6 +784,7 @@ export default function Step2Splitter(props: Props) {
     setCellCropOverrides({});
     setRawSrc(null);
     setPickedColor(null);
+    resetOutlineState();
     onImportModeChange?.("batch");
     let imported = false;
     try {
@@ -857,6 +863,7 @@ export default function Step2Splitter(props: Props) {
       setSheetSrc(null);
       setRawSrc(null);
       setCellCropOverrides({});
+      resetOutlineState();
       splitCellsRef.current = cells;
       setSplitCells(cells);
       onImportModeChange?.("batch");
@@ -882,7 +889,22 @@ export default function Step2Splitter(props: Props) {
     try {
       const added = await splitAndCleanSheet(url, base.length);
       const room = MAX_BATCH_IMAGES - base.length;
-      const combined = [...base, ...added.slice(0, Math.max(0, room))];
+      const addedKept = added.slice(0, Math.max(0, room));
+      // 白フチ適用中なら、追加分にも同じ太さで掛けて見た目を揃える
+      let addedFinal = addedKept;
+      if (outlineWidth > 0) {
+        setBatchProgress("追加分に白フチを付けています…");
+        addedFinal = await Promise.all(
+          addedKept.map(async (cell) => ({ ...cell, src: await addWhiteOutline(cell.src, outlineWidth) })),
+        );
+      }
+      // ベースライン（フチなし版）にも追加分を追記して、後から幅を変えても全コマ整合するように
+      if (outlineBaseRef.current && outlineBaseRef.current.length === base.length) {
+        outlineBaseRef.current = [...outlineBaseRef.current, ...addedKept];
+      } else if (outlineWidth === 0) {
+        outlineBaseRef.current = null;
+      }
+      const combined = [...base, ...addedFinal];
       splitCellsRef.current = combined;
       setSplitCells(combined);
       setSheetSrc(null);
@@ -900,6 +922,70 @@ export default function Step2Splitter(props: Props) {
       setProcessing(false);
       setBatchProgress("");
     }
+  }
+
+  // ── 白フチ ────────────────────────────────────────
+  // 新しいセル一式が入ったらフチ状態はリセット（フチは最後の仕上げとして掛け直す）
+  function resetOutlineState() {
+    outlineBaseRef.current = null;
+    setOutlineWidth(0);
+  }
+
+  async function applyOutlineWidth(next: number) {
+    if (processing) return;
+    const current = splitCellsRef.current.length ? splitCellsRef.current : splitCells;
+    if (!current.length) return;
+    // ベースライン（フチなし状態）を確保。セル数が変わっていたら取り直す
+    if (!outlineBaseRef.current || outlineBaseRef.current.length !== current.length) {
+      outlineBaseRef.current = current.map((cell) => ({ ...cell }));
+    }
+    const base = outlineBaseRef.current;
+    setOutlineWidth(next);
+    setProcessing(true);
+    setBatchProgress(next > 0 ? "白フチを付けています…" : "白フチを外しています…");
+    try {
+      const cells =
+        next > 0
+          ? await Promise.all(base.map(async (cell) => ({ ...cell, src: await addWhiteOutline(cell.src, next) })))
+          : base.map((cell) => ({ ...cell }));
+      splitCellsRef.current = cells;
+      setSplitCells(cells);
+      trackStampEvent("white_outline", { width: next, cellCount: cells.length });
+    } catch (err) {
+      console.error(err);
+      setMessage("白フチの適用に失敗しました。");
+    } finally {
+      setProcessing(false);
+      setBatchProgress("");
+    }
+  }
+
+  function renderOutlineControl() {
+    return (
+      <div className="v2-outline-card">
+        <div className="v2-outline-head">
+          <span>白フチ</span>
+          <strong>{outlineWidth <= 0 ? "なし" : `${outlineWidth.toFixed(1)}px`}</strong>
+        </div>
+        <div className="v2-outline-buttons">
+          <button
+            type="button"
+            disabled={processing || outlineWidth <= 0}
+            onClick={() => void applyOutlineWidth(Math.max(0, +(outlineWidth - 0.5).toFixed(1)))}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            disabled={processing || outlineWidth >= 8}
+            onClick={() => void applyOutlineWidth(Math.min(8, +(outlineWidth + 0.5).toFixed(1)))}
+          >
+            ＋
+          </button>
+        </div>
+        <p>透過した中身のまわりに白いフチを付けます。消しゴムなどの仕上げが済んでから最後にかけるのがおすすめ。</p>
+      </div>
+    );
   }
 
   async function runBatchTransparency() {
@@ -1397,6 +1483,28 @@ export default function Step2Splitter(props: Props) {
             <div className="v2-export-head">
               <span className="v2-export-title">背景透過プレビュー</span>
               <span className="v2-export-sub">画像をクリックして拡大編集</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+                <span style={{ fontSize: 11, color: "var(--v2-muted)", fontWeight: 700 }}>背景:</span>
+                {LIVE_BGS.map((b) => (
+                  <button
+                    key={b.key}
+                    type="button"
+                    title={`背景を${b.label}にする`}
+                    aria-label={`背景を${b.label}にする`}
+                    onClick={() => setLiveBg(b.key)}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      background: b.swatch,
+                      border: liveBg === b.key ? "2px solid var(--v2-pink)" : "1.5px solid var(--v2-line)",
+                      boxShadow: liveBg === b.key ? "0 0 0 2px rgba(247,168,200,0.3)" : "none",
+                      padding: 0,
+                    }}
+                  />
+                ))}
+              </div>
             </div>
             <div className="v2-batch-preview-grid v2-batch-background-grid">
               {splitCells.slice(0, 40).map((cell, index) => (
@@ -1404,6 +1512,7 @@ export default function Step2Splitter(props: Props) {
                   key={cell.id}
                   type="button"
                   className="v2-batch-preview-cell v2-batch-edit-cell"
+                  style={{ background: liveBgCss }}
                   onClick={() => openBatchEditor(index)}
                   aria-label={`${index + 1}枚目を拡大して背景を編集`}
                 >
@@ -1490,6 +1599,8 @@ export default function Step2Splitter(props: Props) {
             >
               背景透過リセット
             </button>
+
+            {renderOutlineControl()}
 
             {batchProgress && <p className="v2-toolbar-note">{batchProgress}</p>}
             {message && <p className="v2-toolbar-note">{message}</p>}

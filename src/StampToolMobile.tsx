@@ -16,6 +16,7 @@ import {
   type GridSize,
   type SheetProfiles,
   type SourceImage,
+  addWhiteOutline,
   centerDominantImageContent,
   centerImageContent,
   clamp,
@@ -272,6 +273,8 @@ export default function StampToolMobile() {
   const [rawSheetSrc, setRawSheetSrc] = useState<string | null>(null);
   const [sheetSrc, setSheetSrc] = useState<string | null>(null);
   const [transparentEnabled, setTransparentEnabled] = useState(false);
+  // 白フチの太さ(px)。0=なし。透過ONの時だけ効く
+  const [outlineWidth, setOutlineWidth] = useState(0);
   const [transparencyBusy, setTransparencyBusy] = useState(false);
   const [splitCells, setSplitCells] = useState<SourceImage[]>([]);
   const [splitMsg, setSplitMsg] = useState("");
@@ -549,6 +552,16 @@ export default function StampToolMobile() {
           src: await makeImageTransparent(cell.src),
         })),
       );
+      // 白フチ（透過後のみ意味があるので透過ONの時だけ）
+      if (outlineWidth > 0) {
+        if (isCurrentJob()) setSplitMsg("白フチを付けています...");
+        nextCells = await Promise.all(
+          nextCells.map(async (cell) => ({
+            ...cell,
+            src: await addWhiteOutline(cell.src, outlineWidth),
+          })),
+        );
+      }
     }
     if (isCurrentJob()) setSplitMsg("分割画像を中央にそろえています...");
     nextCells = await Promise.all(
@@ -652,7 +665,7 @@ export default function StampToolMobile() {
     };
     // cellCropOverrides は個別補正時に手動再分割するため、ここでは依存させない。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetSrc, gridSize, transparentEnabled]);
+  }, [sheetSrc, gridSize, transparentEnabled, outlineWidth]);
 
   function offsetFor(id: string): CellOffset {
     const offset = cellOffsets[id];
@@ -1488,6 +1501,29 @@ export default function StampToolMobile() {
                 <span>自動透過</span>
                 <small>分割後の各コマに、PC版と同じ白背景透過をかけます</small>
               </label>
+
+              {transparentEnabled && (
+                <div className="vm-outline-row">
+                  <span className="vm-outline-label">白フチ</span>
+                  <button
+                    type="button"
+                    disabled={processingSplit || outlineWidth <= 0}
+                    onClick={() => setOutlineWidth((w) => Math.max(0, +(w - 0.5).toFixed(1)))}
+                  >
+                    −
+                  </button>
+                  <span className="vm-outline-value">
+                    {outlineWidth <= 0 ? "なし" : `${outlineWidth.toFixed(1)}px`}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={processingSplit || outlineWidth >= 8}
+                    onClick={() => setOutlineWidth((w) => Math.min(8, +(w + 0.5).toFixed(1)))}
+                  >
+                    ＋
+                  </button>
+                </div>
+              )}
 
               {/* 合算: 複数シートを貯めて最大40個のセットにする */}
               <div className="vm-stock-bar">

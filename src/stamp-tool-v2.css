@@ -4486,3 +4486,47 @@
   opacity: 0.75;
   margin-left: 4px;
 }
+
+/* ===== 白フチ（③背景透過のサイドバー） ===== */
+.v2-outline-card {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1.5px dashed var(--v2-line);
+  border-radius: 12px;
+}
+.v2-outline-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--v2-ink);
+}
+.v2-outline-head strong {
+  color: var(--v2-pink);
+}
+.v2-outline-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+.v2-outline-buttons button {
+  height: 34px;
+  border: 1.5px solid var(--v2-line);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--v2-ink);
+  cursor: pointer;
+}
+.v2-outline-buttons button:disabled {
+  opacity: 0.4;
+}
+.v2-outline-card p {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--v2-muted);
+  font-weight: 700;
+}
