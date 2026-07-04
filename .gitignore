@@ -39,6 +39,9 @@ public/*
 !public/_redirects
 !public/uchinoko-reception.html
 !public/uchinoko-reception.js
+# スタンプ設計のサムネはUI必須アセットなので追跡する（フォルダ移動で消えないように）
+!public/stamp-v2-thumbs/
+!public/stamp-v2-thumbs/*.png
 !public/images/
 public/images/*
 !public/images/uchinoko-gift-*
