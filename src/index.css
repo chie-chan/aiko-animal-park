@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+:root {
+  /* 風船の緑に合わせたLINEボタンの緑（白文字が読めるよう少しだけ深め） */
+  --line-green: #4ccd8a;
+  --line-green-deep: #3bb877;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -42,9 +48,9 @@ a {
   gap: 14px;
   min-height: 64px;
   padding: 10px clamp(14px, 4vw, 40px);
-  border-bottom: 0;
-  background: linear-gradient(135deg, #f9a8c9 0%, #c8b4e8 100%);
-  box-shadow: 0 2px 14px rgba(180, 120, 200, 0.18);
+  border-bottom: 1px solid #f4ecf1;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(216, 130, 160, 0.1);
 }
 
 .standalone-tool-shell {
@@ -71,7 +77,7 @@ a {
   align-items: center;
   gap: 9px;
   min-width: 0;
-  color: white;
+  color: #d76392;
 }
 
 .brand-mark {
@@ -97,7 +103,7 @@ a {
 
 .brand-sub {
   margin-top: 3px;
-  color: rgba(255, 255, 255, 0.84);
+  color: #b7a9d0;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -116,15 +122,19 @@ a {
   min-height: 34px;
   padding: 7px 12px;
   border-radius: 999px;
-  color: #59615e;
+  color: #d76392;
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
 
+.nav-link:hover {
+  background: #fbeef3;
+}
+
 .nav-link.is-active {
-  background: #27302f;
-  color: #fffaf7;
+  background: #e87fa6;
+  color: #ffffff;
 }
 
 .shop-link {
@@ -134,8 +144,8 @@ a {
   padding: 7px 14px;
   border: 0;
   border-radius: 999px;
-  background: #ffffff;
-  color: #8b4b78;
+  background: #e87fa6;
+  color: #ffffff;
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
@@ -1086,13 +1096,13 @@ select {
 }
 
 .compact-nav .nav-link {
-  color: rgba(255, 255, 255, 0.9);
+  color: #d76392;
   min-height: 34px;
 }
 
 .compact-nav .nav-link.is-active {
-  background: #ffffff;
-  color: #8b4b78;
+  background: #e87fa6;
+  color: #ffffff;
 }
 
 .park-gallery-page {
@@ -1106,9 +1116,9 @@ select {
   text-align: center;
 }
 
-.park-gallery-kicker {
+.park-gallery-hero .park-gallery-kicker {
   margin: 0 0 8px;
-  color: #9a8aaa;
+  color: #e09bb6;
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -1168,7 +1178,7 @@ select {
 
 .park-gallery-tabs button[aria-selected="true"] {
   border-color: transparent;
-  background: linear-gradient(135deg, #efa3c5, #c8b4e8);
+  background: linear-gradient(135deg, #f2a0bd, #e87fa6);
   color: #ffffff;
   box-shadow: 0 8px 18px rgba(239, 163, 197, 0.28);
 }
@@ -1437,7 +1447,7 @@ select {
   padding: 0 16px;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(135deg, #efa3c5, #c8b4e8);
+  background: linear-gradient(135deg, #f2a0bd, #e87fa6);
   color: #fff;
   font-size: 13px;
   font-weight: 900;
@@ -1493,7 +1503,7 @@ select {
   padding: 7px 12px;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(135deg, #efa3c5, #c8b4e8);
+  background: linear-gradient(135deg, #f2a0bd, #e87fa6);
   color: #fff;
   font-size: 12px;
   font-weight: 900;
@@ -1502,6 +1512,7 @@ select {
 }
 
 .park-copy-code {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1509,20 +1520,38 @@ select {
   min-width: 0;
   min-height: 32px;
   padding: 4px 12px;
-  border: 1px solid rgba(239, 163, 197, 0.5);
+  border: 1.5px solid #f1e2ea;
   border-radius: 999px;
-  background: #fce4ec;
+  background: #ffffff;
   box-shadow: 0 4px 12px rgba(198, 150, 205, 0.12);
   cursor: copy;
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
+.park-copy-code::before {
+  content: "";
+  flex: 0 0 13px;
+  height: 18px;
+  background: url("/assets/balloon.png") no-repeat center / contain;
+  opacity: 0;
+  transform: translateY(3px) scale(0.55);
+  transform-origin: bottom center;
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.3, 1.3, 0.5, 1);
+  pointer-events: none;
+}
+
 .park-copy-code:hover,
 .park-copy-code:focus-visible {
-  border-color: rgba(190, 103, 156, 0.65);
-  background: #f8d5e4;
+  border-color: #f1e2ea;
+  background: #ffffff;
   box-shadow: 0 8px 18px rgba(198, 150, 205, 0.2);
   transform: translateY(-1px);
+}
+
+.park-copy-code:hover::before,
+.park-copy-code:focus-visible::before {
+  opacity: 1;
+  transform: none;
 }
 
 .park-copy-code:active {
@@ -1540,15 +1569,18 @@ select {
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: #8b4b78;
+  color: #d76392;
   font-size: 11px;
+  font-weight: 800;
   letter-spacing: 0;
 }
 
 .park-copy-code:hover b,
 .park-copy-code:focus-visible b {
   background: transparent;
-  color: #6d315d;
+  color: #d76392;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .park-copy-code small {
@@ -1561,11 +1593,11 @@ select {
 
 .park-catalog-jump {
   display: flex;
-  gap: 8px;
-  margin: -8px 0 24px;
+  flex-wrap: wrap;
+  gap: 26px 8px;
+  margin: 0 0 24px;
+  padding-top: 26px;
   padding-bottom: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
 .park-catalog-jump::-webkit-scrollbar {
@@ -1573,13 +1605,14 @@ select {
 }
 
 .park-catalog-jump a {
+  position: relative;
   flex: 0 0 auto;
   min-height: 34px;
   padding: 8px 12px;
-  border: 1px solid rgba(239, 163, 197, 0.45);
+  border: 1.5px solid #f1e2ea;
   border-radius: 999px;
   background: #ffffff;
-  color: #8b4b78;
+  color: #4a4453;
   font-size: 12px;
   font-weight: 900;
   line-height: 1.4;
@@ -1587,10 +1620,40 @@ select {
   white-space: nowrap;
 }
 
+.park-catalog-jump a::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  margin-bottom: 2px;
+  width: 15px;
+  height: 20px;
+  background: url("/assets/balloon.png") no-repeat center / contain;
+  opacity: 0;
+  transform: translate(-50%, 6px) scale(0.6);
+  transform-origin: bottom center;
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.3, 1.3, 0.5, 1);
+  pointer-events: none;
+}
+
 .park-catalog-jump a:hover,
 .park-catalog-jump a:focus-visible {
-  border-color: rgba(190, 103, 156, 0.65);
-  background: #fff7fb;
+  border-color: #ef4d5b;
+  background: #ffffff;
+}
+
+.park-catalog-jump a:hover::after,
+.park-catalog-jump a:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+/* 携帯：横スクロールで見切れないよう折り返して全部表示 */
+@media (max-width: 640px) {
+  .park-catalog-jump {
+    gap: 8px;
+    padding-top: 8px;
+  }
 }
 
 .park-card-body small {
@@ -1657,7 +1720,7 @@ select {
   height: 28px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: linear-gradient(180deg, #efa3c5, #c8b4e8);
+  background: linear-gradient(180deg, #f2a0bd, #e87fa6);
 }
 
 .park-style-section p {
@@ -1735,8 +1798,8 @@ select {
 
 .park-profile-avatar {
   display: block;
-  width: 160px;
-  height: 160px;
+  width: 168px;
+  height: 168px;
   object-fit: cover;
   border-radius: 50%;
   margin: 0 auto 18px;
@@ -1814,6 +1877,12 @@ select {
   text-decoration: underline;
 }
 
+/* チップは info-block 内でもグレー文字・下線なし（Profileのショップと統一） */
+.park-info-block a.hub-chip {
+  color: #4a4453;
+  text-decoration: none;
+}
+
 .park-info-list {
   list-style: none;
   padding: 0;
@@ -1837,34 +1906,158 @@ select {
   color: #8a8295;
 }
 
+/* ショップ・活動場所：マウスオンで風船＋赤枠（ハブと統一） */
+.park-info-list--balloon li {
+  border: 1.5px solid transparent;
+  transition: border-color 0.16s ease;
+}
+.park-info-list--balloon li:hover {
+  border-color: #ef4d5b;
+}
+.park-info-list--balloon li a {
+  position: relative;
+  align-self: flex-start;
+}
+.park-info-list--balloon li a::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  margin-left: 8px;
+  top: 50%;
+  width: 15px;
+  height: 21px;
+  background: url("/assets/balloon.png") no-repeat center / contain;
+  opacity: 0;
+  transform: translateY(-30%) scale(0.55);
+  transform-origin: bottom center;
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.3, 1.3, 0.5, 1);
+  pointer-events: none;
+}
+.park-info-list--balloon li:hover a::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+/* ===== 共通チップ（ハブ・About のショップ等） ===== */
+.hub-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.hub-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid #f1e2ea;
+  text-decoration: none;
+  color: #4a4453;
+  font-weight: 700;
+  font-size: 14px;
+  transition: border-color 0.16s ease;
+}
+/* マウスオンで先頭に風船＋赤枠（サイズは変えない） */
+.hub-chip:hover {
+  border-color: #ef4d5b;
+}
+.hub-chip-balloon {
+  width: 18px;
+  height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
+  opacity: 0;
+  transform: translateY(3px) scale(0.7);
+  transform-origin: bottom center;
+  transition: opacity 0.18s ease, transform 0.24s cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+.hub-chip:hover .hub-chip-balloon {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+/* タッチ端末（ホバー無し）では、指でタップした瞬間(:active)に風船を表示 */
+@media (hover: none) {
+  .hub-chip:active {
+    border-color: #ef4d5b;
+  }
+  .hub-chip:active .hub-chip-balloon {
+    opacity: 1;
+    transform: none;
+  }
+  .hub-menu-list a:active::after,
+  .smenu-list a:active::after {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  .hub-btn:not(.hub-btn--line):active {
+    border-color: #ef4d5b;
+  }
+  .hub-btn:active .hub-btn-balloon {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ===== 共通SNS丸アイコン（ハブ・About の活動場所） ===== */
+.hub-socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.hub-social {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  color: #8a8393;
+  font-size: 11px;
+  font-weight: 700;
+  transition: transform 0.14s ease;
+}
+.hub-social:hover {
+  transform: translateY(-3px);
+}
+.hub-social-emoji {
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 22px;
+  background: #fbeef3;
+  color: #e87fa6;
+  transition: background 0.14s ease;
+}
+.hub-social:hover .hub-social-emoji {
+  background: #f7dbe8;
+}
+
 .park-contact-block {
   padding: 0;
   overflow: hidden;
 }
 
 .park-line-cta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 76px;
-  padding: 18px 22px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #fff7fb 0%, #f2fff7 100%);
-  color: #2f263d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 32px;
+  border-radius: 999px;
+  background: var(--line-green);
+  color: #fff !important;
+  font-weight: 800;
+  font-size: 14px;
   text-decoration: none !important;
-  box-shadow: inset 0 0 0 1px rgba(92, 203, 117, 0.22);
+  box-shadow: 0 8px 18px rgba(76, 205, 138, 0.28);
+  transition: transform 0.14s ease, background 0.14s ease;
 }
 
-.park-line-cta span {
-  color: #1f7c45;
-  font-size: 17px;
-  font-weight: 900;
-}
-
-.park-line-cta small {
-  color: #756b80;
-  font-size: 12px;
-  line-height: 1.6;
+.park-line-cta:hover {
+  background: var(--line-green-deep);
+  transform: translateY(-2px);
 }
 
 .park-info-steps {
@@ -1897,7 +2090,7 @@ select {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #c878a4;
+  background: #d76392;
   color: #fff;
   display: flex;
   align-items: center;

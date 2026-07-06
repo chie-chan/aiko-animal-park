@@ -842,12 +842,7 @@ export default function GalleryPage() {
 
           <div className="park-copy-guide" aria-label="注文番号の使い方">
             <div>
-              <p>
-                {hasReturnUrl
-                  ? "気に入った番号をコピーして教えてね"
-                  : "気に入った番号をコピーして教えてね"}
-              </p>
-              <p className="park-code-legend">番号はスタイルごとに頭文字を付けています。水彩 → W / 刺繍 → E / ステンドグラス → SG / ふしぎな世界 → FA・SA / そのほか → CO・FP・EV・SO など。</p>
+              <p>気に入った番号をコピーしてね！</p>
             </div>
             <button type="button" onClick={returnToOrderPage}>
               {hasReturnUrl ? "注文ページに戻る" : "閉じて戻ってね"}

@@ -1,0 +1,184 @@
+/* ======================================================
+   共有サイトメニュー（umao型・全ページ共通）
+   デスクトップ＝左に浮く固定カード／モバイル＝上部バー＋ドロワー
+====================================================== */
+.smenu {
+  position: fixed;
+  top: 26px;
+  left: 26px;
+  width: 232px;
+  padding: 30px 26px 24px;
+  background: #fff;
+  border-radius: 26px;
+  box-shadow: 0 14px 40px rgba(216, 130, 160, 0.16);
+  z-index: 40;
+}
+
+.smenu-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.smenu-logo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-decoration: none;
+  color: #d76392;
+}
+.smenu-dot {
+  font-size: 12px;
+  line-height: 1;
+}
+.smenu-logo-text {
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.smenu-logo-text small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #c3a7cf;
+}
+
+.smenu-burger {
+  display: none;
+}
+
+.smenu-nav {
+  margin-top: 26px;
+}
+.smenu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.smenu-list a {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  text-decoration: none;
+  color: #d76392;
+}
+.smenu-list a::after {
+  content: "";
+  position: absolute;
+  right: 100%;
+  margin-right: 8px;
+  top: 50%;
+  width: 15px;
+  height: 21px;
+  background: url("/assets/balloon.png") no-repeat center / contain;
+  opacity: 0;
+  transform: translateY(-30%) scale(0.55);
+  transform-origin: bottom center;
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.3, 1.3, 0.5, 1);
+  pointer-events: none;
+}
+.smenu-list a:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+.smenu-list a.is-current .smenu-en {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+.smenu-en {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+.smenu-jp {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #8a8393;
+}
+
+/* ---- 本文オフセット（メニューのぶん空ける） ---- */
+.site-main--menu {
+  margin-left: 300px;
+}
+
+/* デスクトップは上部ヘッダーが無いので、各ページのstickyタブを上に詰める */
+@media (min-width: 901px) {
+  .site-main--menu .park-gallery-tabs {
+    top: 14px;
+  }
+  .site-main--menu .park-category-tabs {
+    top: 22px;
+  }
+}
+
+/* ======================================================
+   モバイル（上部バー＋ハンバーガー）
+====================================================== */
+@media (max-width: 900px) {
+  .smenu {
+    position: sticky;
+    top: 0;
+    left: 0;
+    width: auto;
+    padding: 14px 18px;
+    border-radius: 0;
+    box-shadow: 0 2px 12px rgba(216, 130, 160, 0.14);
+  }
+  .smenu-bar {
+    align-items: center;
+  }
+  .smenu-logo-text {
+    font-size: 16px;
+  }
+  .smenu-burger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  .smenu-burger span {
+    display: block;
+    height: 2.5px;
+    border-radius: 2px;
+    background: #d76392;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .smenu.is-open .smenu-burger span:nth-child(1) {
+    transform: translateY(7.5px) rotate(45deg);
+  }
+  .smenu.is-open .smenu-burger span:nth-child(2) {
+    opacity: 0;
+  }
+  .smenu.is-open .smenu-burger span:nth-child(3) {
+    transform: translateY(-7.5px) rotate(-45deg);
+  }
+
+  .smenu-nav {
+    display: none;
+    margin-top: 16px;
+  }
+  .smenu.is-open .smenu-nav {
+    display: block;
+  }
+  .smenu-list {
+    gap: 16px;
+  }
+
+  .site-main--menu {
+    margin-left: 0;
+  }
+}

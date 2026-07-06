@@ -18,31 +18,26 @@ export default function OrderPage() {
               <strong>公式LINEを友だち追加</strong>
               <small>ご相談やお写真のやり取りは公式LINEで承ります。</small>
               <div className="park-order-actions">
-                <a className="park-info-button park-info-button--line" href="https://lin.ee/hsoPQut" target="_blank" rel="noopener noreferrer">
-                  <span className="park-info-button-icon" aria-hidden="true">📲</span>
-                  <span className="park-info-button-label">公式LINEを追加する</span>
-                  <span className="park-info-button-arrow" aria-hidden="true">→</span>
+                <a className="park-line-cta" href="https://lin.ee/hsoPQut" target="_blank" rel="noopener noreferrer">
+                  公式LINEを追加する
                 </a>
               </div>
             </li>
             <li>
               <strong>ショップでご注文</strong>
               <small>BASE / minne / Creema から、お好きな商品を購入してください。</small>
-              <div className="park-order-actions park-shop-actions">
-                <a className="park-info-button park-info-button--line" href="https://aikoanimal.base.shop/" target="_blank" rel="noopener noreferrer">
-                  <span className="park-info-button-icon" aria-hidden="true">🛍️</span>
-                  <span className="park-info-button-label">BASE</span>
-                  <span className="park-info-button-arrow" aria-hidden="true">→</span>
+              <div className="hub-chips">
+                <a className="hub-chip" href="https://aikoanimal.base.shop/" target="_blank" rel="noopener noreferrer">
+                  <img className="hub-chip-balloon" src="/assets/balloon.png" alt="" aria-hidden="true" />
+                  BASE
                 </a>
-                <a className="park-info-button park-info-button--line" href="https://minne.com/@aiko-animal" target="_blank" rel="noopener noreferrer">
-                  <span className="park-info-button-icon" aria-hidden="true">🛍️</span>
-                  <span className="park-info-button-label">minne</span>
-                  <span className="park-info-button-arrow" aria-hidden="true">→</span>
+                <a className="hub-chip" href="https://minne.com/@aiko-animal" target="_blank" rel="noopener noreferrer">
+                  <img className="hub-chip-balloon" src="/assets/balloon.png" alt="" aria-hidden="true" />
+                  minne
                 </a>
-                <a className="park-info-button park-info-button--line" href="https://www.creema.jp/c/aiko_animal" target="_blank" rel="noopener noreferrer">
-                  <span className="park-info-button-icon" aria-hidden="true">🛍️</span>
-                  <span className="park-info-button-label">Creema</span>
-                  <span className="park-info-button-arrow" aria-hidden="true">→</span>
+                <a className="hub-chip" href="https://www.creema.jp/c/aiko_animal" target="_blank" rel="noopener noreferrer">
+                  <img className="hub-chip-balloon" src="/assets/balloon.png" alt="" aria-hidden="true" />
+                  Creema
                 </a>
               </div>
             </li>
