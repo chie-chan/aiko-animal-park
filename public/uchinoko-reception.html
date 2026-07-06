@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>うちの子AIアート無料プレゼント受付</title>
-  <meta name="description" content="うちの子のお写真が、世界にひとつの水彩アートに。無料プレゼント受付中🐾 整理券をうけとって、できあがりを楽しみに待っててね。">
+  <meta name="description" content="うちの子のお写真が、世界にひとつの水彩アートに。無料プレゼント受付中整理券をうけとって、できあがりを楽しみに待っててね。">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://challenges.cloudflare.com">
@@ -13,9 +13,9 @@
     :root {
       --ink: #33253b;
       --muted: #715f78;
-      --line: #f0c8da;
-      --pink: #d9538d;
-      --pink-dark: #aa356b;
+      --line: #f1e2ea;
+      --pink: #e87fa6;
+      --pink-dark: #d76392;
       --mint: #5bb7a5;
       --mint-soft: #e7f7f3;
       --amber: #d99a33;
@@ -168,10 +168,11 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      position: relative;
       min-height: 46px;
       padding: 12px 18px;
       border: 2px solid transparent;
-      border-radius: 12px;
+      border-radius: 999px;
       background: var(--panel);
       color: var(--ink);
       font-weight: 700;
@@ -181,6 +182,21 @@
     }
 
     .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(80,40,60,.14); }
+    .btn::before {
+      content: "";
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      width: 16px;
+      height: 22px;
+      background: url("/assets/balloon.png") no-repeat center / contain;
+      opacity: 0;
+      transform: translateY(-30%) scale(.6);
+      transform-origin: bottom center;
+      transition: opacity .18s ease, transform .22s cubic-bezier(.3,1.3,.5,1);
+      pointer-events: none;
+    }
+    .btn:hover::before { opacity: 1; transform: translateY(-50%) scale(1); }
     .btn.primary { background: var(--pink); color: #fff; }
     .btn.secondary { border-color: var(--line); color: var(--pink-dark); }
     .btn.mint { background: var(--mint); color: #fff; }
@@ -743,13 +759,13 @@
     <main class="shell">
       <section class="hero" id="hero">
         <div class="hero-copy">
-          <div class="brand">🎁 うちの子AIアート 無料プレゼント</div>
+          <div class="brand">うちの子AIアート 無料プレゼント</div>
           <div class="hero-headline">
             <h1><span>うちの子が、</span><span>世界にひとつの一枚に</span></h1>
-            <p class="lead">お写真1枚から、やさしい水彩アートを無料でお作りします🐾 整理券をうけとって、のんびり待っててね。完成したらInstagramでお披露目します🎉</p>
+            <p class="lead">お写真1枚から、やさしい水彩アートを無料でお作りします整理券をうけとって、のんびり待っててね。完成したらInstagramでお披露目します</p>
           </div>
           <div class="hero-actions">
-            <a href="#reception" class="btn primary">🎁 受付フォームへすすむ</a>
+            <a href="#reception" class="btn primary">受付フォームへすすむ</a>
           </div>
           <div class="status-board" aria-live="polite">
             <div class="metric"><strong id="waitCount">--</strong><span>ただいまの待ち</span></div>
@@ -762,8 +778,8 @@
       <section class="content-band" id="reception">
         <section class="form-panel" id="formPanel">
           <div class="form-intro">
-            <h2 class="panel-title">🎁 無料プレゼント受付</h2>
-            <p class="panel-sub">完成作品を「みんなの作例」としてSNSやショップ等で紹介させていただくのが、無料の理由です🐾 非公開の希望は有料オーダーへどうぞ。</p>
+            <h2 class="panel-title">無料プレゼント受付</h2>
+            <p class="panel-sub">完成作品を「みんなの作例」としてSNSやショップ等で紹介させていただくのが、無料の理由です非公開の希望は有料オーダーへどうぞ。</p>
           </div>
 
           <ol class="flow-summary" aria-label="受付の流れ">
@@ -780,8 +796,8 @@
               <label>うちの子のお写真 <span class="req">必須</span></label>
               <label class="upload" id="uploadBox" for="photoInput">
                 <span>
-                  <strong>📷 タップして写真をえらぶ</strong>
-                  <span>ペットだけが写っていて、元写真として公開OKな一枚をえらんでね🐾</span>
+                  <strong>タップして写真をえらぶ</strong>
+                  <span>ペットだけが写っていて、元写真として公開OKな一枚をえらんでね</span>
                 </span>
               </label>
               <input id="photoInput" name="photo" type="file" accept="image/*" hidden>
@@ -815,18 +831,18 @@
               <div class="choice-grid three">
                 <label class="choice">
                   <input type="radio" name="taste" value="watercolor_default" checked>
-                  <strong>🎨 水彩定番</strong>
+                  <strong>水彩定番</strong>
                   <span>迷ったらこれ。やさしい定番の水彩タッチ。</span>
                 </label>
                 <label class="choice">
                   <input type="radio" name="taste" value="seasonal_flower">
-                  <strong>🌿 紫陽花入り水彩</strong>
+                  <strong>紫陽花入り水彩</strong>
                   <span>水彩定番に、淡い紫陽花をそっと添えます。</span>
                 </label>
                 <label class="choice">
                   <input type="radio" name="taste" value="aiko_omakase">
-                  <strong>🎁 おまかせ</strong>
-                  <span>何が届くかはお楽しみ！完全にあいこにおまかせ🐾</span>
+                  <strong>おまかせ</strong>
+                  <span>何が届くかはお楽しみ！完全にあいこにおまかせ</span>
                 </label>
               </div>
             </div>
@@ -841,12 +857,12 @@
               <div class="choice-grid">
                 <label class="choice">
                   <input type="radio" name="plan" value="normal" checked>
-                  <strong>🎟️ 順番受付（無料）</strong>
+                  <strong>順番受付（無料）</strong>
                   <span>整理券の順番に、心をこめてお作りします。</span>
                 </label>
                 <label class="choice">
                   <input type="radio" name="plan" value="rush">
-                  <strong>⚡ 優先制作（¥980）</strong>
+                  <strong>優先制作（¥980）</strong>
                   <span>非公開で受け取りたい方、早めにほしい方へ。</span>
                 </label>
               </div>
@@ -865,10 +881,10 @@
             <div class="turnstile-gate" id="turnstileGate" aria-label="送信前の確認"></div>
 
             <div class="form-actions">
-              <button class="btn primary" id="submitBtn" type="submit">🎟️ 整理券をうけとる</button>
-              <a class="btn secondary" id="paidOrderLink" href="https://aikoanimal.base.shop/items/146802769" target="_blank" rel="noopener">🤫 非公開の希望は有料オーダーへ</a>
+              <button class="btn primary" id="submitBtn" type="submit">整理券をうけとる</button>
+              <a class="btn secondary" id="paidOrderLink" href="https://aikoanimal.base.shop/items/146802769" target="_blank" rel="noopener">非公開の希望は有料オーダーへ</a>
             </div>
-            <p class="help">送信すると、あなた専用の整理券URLが出ます。スクショかコピーで保存してね🎟️</p>
+            <p class="help">送信すると、あなた専用の整理券URLが出ます。スクショかコピーで保存してね</p>
           </form>
         </section>
 
@@ -899,8 +915,8 @@
             <p id="ticketMeta">スタイルとInstagram IDを表示します。</p>
           </div>
           <div class="mini-actions">
-            <button class="btn secondary" id="copyTicketBtn" type="button">🎟️ 整理券URLをコピー</button>
-            <a class="btn mint" id="rushBtn" href="https://aikoanimal.base.shop/items/146802769" target="_blank" rel="noopener">⚡ 優先制作にする（¥980）</a>
+            <button class="btn secondary" id="copyTicketBtn" type="button">整理券URLをコピー</button>
+            <a class="btn mint" id="rushBtn" href="https://aikoanimal.base.shop/items/146802769" target="_blank" rel="noopener">優先制作にする（¥980）</a>
             <a class="btn secondary" id="lineBtn" href="#" target="_blank" rel="noopener" hidden>LINEで質問する</a>
           </div>
           <div class="download-grid" id="downloadGrid" hidden></div>

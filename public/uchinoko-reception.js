@@ -30,7 +30,7 @@
   };
 
   const $ = (id) => document.getElementById(id);
-  const UPLOAD_DEFAULT_HTML = "<span><strong>📷 タップして写真をえらぶ</strong><span>ペットだけが写っていて、元写真として公開OKな一枚をえらんでね🐾</span></span>";
+  const UPLOAD_DEFAULT_HTML = "<span><strong>タップして写真をえらぶ</strong><span>ペットだけが写っていて、元写真として公開OKな一枚をえらんでね</span></span>";
   const UPLOAD_CLOSED_HTML = '<img class="upload-closed-art" src="/images/uchinoko-gift-closed.webp" alt="本日の無料枠は終了しました">';
 
   function setText(id, value) {
@@ -247,8 +247,8 @@
     const submit = $("submitBtn");
     if (!submit || submit.disabled) return;
     submit.textContent = readSelected("plan") === "rush" ?
-      "⚡ BASEで優先制作を申し込む" :
-      "🎟️ 整理券をうけとる";
+      "BASEで優先制作を申し込む" :
+      "整理券をうけとる";
   }
 
   function readSelected(name) {
@@ -308,7 +308,7 @@
       return;
     }
     const box = $("uploadBox");
-    box.innerHTML = "<span><strong>写真をよみこみ中…</strong><span>ちょっとだけ待っててね🐾</span></span>";
+    box.innerHTML = "<span><strong>写真をよみこみ中…</strong><span>ちょっとだけ待っててね</span></span>";
     try {
       const compressed = await compressPhoto(file);
       state.photoFile = file;
@@ -333,9 +333,9 @@
     const plan = readSelected("plan") || "normal";
     const okShare = $("okShare").checked;
 
-    if (!state.photoBase64) return {error: "うちの子のお写真をえらんでね📷"};
-    if (!petName) return {error: "うちの子のおなまえを教えてね🐾"};
-    if (!petCount) return {error: "写真に写ってるペットの数をえらんでね🐾"};
+    if (!state.photoBase64) return {error: "うちの子のお写真をえらんでね"};
+    if (!petName) return {error: "うちの子のおなまえを教えてね"};
+    if (!petCount) return {error: "写真に写ってるペットの数をえらんでね"};
     if (!/^[A-Za-z0-9._]{1,30}$/.test(instagramId)) return {error: "Instagram IDを正しく入力してください。"};
     if (taste === "gallery_reference" && !galleryCode) return {error: "ギャラリー番号を入力してください。"};
     if (!okShare) return {error: "無料プレゼントは、元写真・完成作品・Instagram IDの掲載同意が必要です。非公開の希望は有料オーダーへどうぞ。"};
@@ -388,7 +388,7 @@
     }
 
     submit.disabled = true;
-    submit.textContent = "整理券を準備中…🎟️";
+    submit.textContent = "整理券を準備中…";
     try {
       const data = await fetchJson("/createGiftReception", {
         method: "POST",
@@ -452,8 +452,8 @@
   }
 
   function statusLabel(status) {
-    if (status === "done") return "かんせい🎉";
-    if (status === "processing") return "せいさく中🎨";
+    if (status === "done") return "かんせい";
+    if (status === "processing") return "せいさく中";
     if (status === "error") return "確認中";
     return "じゅんばん待ち";
   }
@@ -469,8 +469,8 @@
     const slug = ticket.slug || state.ticketSlug;
     const absoluteTicketUrl = slug ? `${location.origin}/gift/${encodeURIComponent(slug)}` : location.href;
     const isDuplicate = context === "duplicate";
-    setText("ticketTitle", ticket.isDone ? "できあがりました🎉" : isDuplicate ? "受付済みです🎟️" : justCreated ? "整理券をうけとりました🎟️" : "整理券ページです🎟️");
-    setText("ticketLead", ticket.isDone ? "下の画像からダウンロードできます🎁" : isDuplicate ? "このInstagram IDではすでに受付済みです。前回の整理券ページを表示しています。" : "完成したらこのページからダウンロードできます。完成まではこのURLを保存しておいてね。");
+    setText("ticketTitle", ticket.isDone ? "できあがりました" : isDuplicate ? "受付済みです" : justCreated ? "整理券をうけとりました" : "整理券ページです");
+    setText("ticketLead", ticket.isDone ? "下の画像からダウンロードできます" : isDuplicate ? "このInstagram IDではすでに受付済みです。前回の整理券ページを表示しています。" : "完成したらこのページからダウンロードできます。完成まではこのURLを保存しておいてね。");
     setText("ticketNo", `No. ${ticket.ticketNo || "--"}`);
     setText("aheadCount", String(stats.aheadCount ?? "--"));
     setText("ticketEta", stats.etaText || "--");
@@ -488,7 +488,7 @@
       notice,
       isDuplicate ?
         "2回目の送信は受け付けず、前回の整理券ページを表示しました。写真や内容は上書きしていません。" :
-        justCreated ? "このURLを保存してね🎟️ 完成したらここに画像が表示されます。" : "このURLを保存しておいてね。完成したらここからダウンロードできます。",
+        justCreated ? "このURLを保存してね完成したらここに画像が表示されます。" : "このURLを保存しておいてね。完成したらここからダウンロードできます。",
       "ok",
     );
     notice.dataset.ticketUrl = absoluteTicketUrl;

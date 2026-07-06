@@ -46,8 +46,23 @@ export default function HomePage() {
               </a>
             </div>
           </div>
-          <a className="hub-cover-scroll" href="#profile">
+          <a className="hub-cover-scroll" href="#gift">
             SCROLL ↓
+          </a>
+        </section>
+
+        {/* GIFT / 無料プレゼント */}
+        <section id="gift" className="hub-sec hub-sec--tint">
+          <p className="hub-sec-en">FREE GIFT</p>
+          <h2 className="hub-sec-title">うちの子を無料で水彩アートに</h2>
+          <p className="hub-sec-body">
+            お写真1枚を送るだけ。完成したらInstagramでお披露目して、あなたを@メンションします。
+            <br />
+            整理券をうけとって、のんびり待っててね。
+          </p>
+          <a className="hub-btn" href="/uchinoko-gift">
+            <img className="hub-btn-balloon" src="/assets/balloon.png" alt="" aria-hidden="true" />
+            無料でうけとる →
           </a>
         </section>
 
