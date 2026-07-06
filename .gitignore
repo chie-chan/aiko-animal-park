@@ -39,8 +39,13 @@ nanto-maker/
 # free gift Cloudflare/PARK recovery path.
 public/*
 !public/_redirects
+!public/aiko-dog-icon.jpeg
+!public/aiko-profile.jpg
+!public/gallery-manifest.json
 !public/uchinoko-reception.html
 !public/uchinoko-reception.js
+!public/threads-present/
+!public/threads-present/**
 # スタンプ設計のサムネはUI必須アセットなので追跡する（フォルダ移動で消えないように）
 !public/stamp-v2-thumbs/
 !public/stamp-v2-thumbs/*.png
@@ -49,6 +54,13 @@ public/images/*
 !public/images/uchinoko-gift-*
 !public/assets/
 public/assets/*
+!public/assets/gallery/
+!public/assets/gallery/**
+!public/assets/note-ai-catalog-20260512.json
+!public/assets/note-catalog/
+!public/assets/note-catalog/**
+!public/assets/style-samples/
+!public/assets/style-samples/**
 !public/assets/gift-instagram/
 public/assets/gift-instagram/*
 !public/assets/gift-instagram/photo-to-illustration-cover.png
