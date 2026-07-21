@@ -2,6 +2,9 @@ import { type MouseEvent, type TouchEvent, useEffect, useMemo, useRef, useState 
 import { useSearchParams } from "react-router-dom";
 
 const LOCAL_MANIFEST_URL = "/gallery-manifest.json";
+const REMOTE_WORKS_MANIFEST_URL =
+  "https://firebasestorage.googleapis.com/v0/b/aiko-animal-orders-stg.firebasestorage.app/o/gallery-manifest.json?alt=media";
+const TRUSTED_GALLERY_BUCKET = "aiko-animal-orders-stg.firebasestorage.app";
 const NOTE_CATALOG_URL = "/assets/note-ai-catalog-20260512.json";
 
 const ALLOWED_RETURN_HOSTS = new Set([
@@ -465,7 +468,51 @@ function parseFirebaseStorageUrl(raw: string | undefined | null): FirebaseStorag
 function safeGalleryThumbCandidate(raw: string | undefined | null) {
   if (!raw || typeof raw !== "string") return "";
   const ref = parseFirebaseStorageUrl(raw);
-  return ref ? "" : raw;
+  if (!ref) return raw;
+  if (ref.bucket !== TRUSTED_GALLERY_BUCKET) return "";
+  const storagePath = ref.path.replace(/^\/+/, "");
+  if (!/^codex-studio\/cards\/previews\/[^/]+\.webp$/i.test(storagePath)) return "";
+  return `https://firebasestorage.googleapis.com/v0/b/${TRUSTED_GALLERY_BUCKET}/o/${encodeURIComponent(storagePath)}?alt=media`;
+}
+
+function safeGalleryImageCandidate(raw: string | undefined | null) {
+  if (!raw || typeof raw !== "string") return "";
+  const ref = parseFirebaseStorageUrl(raw);
+  if (!ref) return raw;
+  if (ref.bucket !== TRUSTED_GALLERY_BUCKET) return "";
+  const storagePath = ref.path.replace(/^\/+/, "");
+  if (!/^codex-studio\/cards\/(?!previews\/)[^/]+\.webp$/i.test(storagePath)) return "";
+  return `https://firebasestorage.googleapis.com/v0/b/${TRUSTED_GALLERY_BUCKET}/o/${encodeURIComponent(storagePath)}?alt=media`;
+}
+
+function safePublicGalleryText(value: unknown, fallback = "") {
+  return String(value || fallback || "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[A-Z0-9]{12,}/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
+}
+
+function sanitizeRemoteGalleryItem(source: unknown): GalleryItem | null {
+  if (!source || typeof source !== "object") return null;
+  const item = source as Record<string, unknown>;
+  const galleryNo = String(item.galleryNo || item.gallery_no || "").trim().toUpperCase();
+  if (!/^G-\d{3,}$/.test(galleryNo)) return null;
+
+  const imageUrl = safeGalleryImageCandidate(typeof item.imageUrl === "string" ? item.imageUrl : "");
+  const thumbnailUrl = safeGalleryThumbCandidate(typeof item.thumbnailUrl === "string" ? item.thumbnailUrl : "");
+  if (!imageUrl || !thumbnailUrl) return null;
+
+  const productName = safePublicGalleryText(item.productTypeLabel || item.productName || item.selectedDesignName, "制作事例");
+  return {
+    galleryNo,
+    imageUrl,
+    thumbnailUrl,
+    productName,
+    selectedDesignName: safePublicGalleryText(item.selectedDesignName || productName, productName),
+    createdAt: safePublicGalleryText(item.createdAt),
+  };
 }
 
 function getGalleryThumbUrl(item: GalleryItem) {
@@ -479,7 +526,12 @@ function getGalleryThumbUrl(item: GalleryItem) {
 }
 
 function getGalleryImageUrl(item: GalleryItem) {
-  return safeGalleryThumbCandidate(item.imageUrl) || getGalleryThumbUrl(item);
+  return safeGalleryImageCandidate(item.imageUrl) || getGalleryThumbUrl(item);
+}
+
+function galleryNoNumber(value: string | undefined) {
+  const match = String(value || "").match(/^G-(\d+)$/i);
+  return match ? Number(match[1]) || 0 : 0;
 }
 
 function detectCategory(source: GalleryItem): string {
@@ -527,11 +579,38 @@ export default function GalleryPage() {
       try {
         setLoading(true);
         setError("");
-        const response = await fetch(`${LOCAL_MANIFEST_URL}?ts=${Date.now()}`, { cache: "no-store" });
-        if (!response.ok) throw new Error("manifest not found");
-        const data = await response.json();
-        const nextItems = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
-        if (alive) setItems(nextItems.filter((item: GalleryItem) => getGalleryImageUrl(item)));
+        const cacheBust = Date.now();
+        const [localResult, remoteResult] = await Promise.allSettled([
+          fetch(`${LOCAL_MANIFEST_URL}?ts=${cacheBust}`, { cache: "no-store" }).then(async (response) => {
+            if (!response.ok) throw new Error("local manifest not found");
+            const data = await response.json();
+            return Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
+          }),
+          fetch(`${REMOTE_WORKS_MANIFEST_URL}&ts=${cacheBust}`, { cache: "no-store" }).then(async (response) => {
+            if (!response.ok) throw new Error("remote manifest not found");
+            const data = await response.json();
+            const rawItems = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
+            return rawItems
+              .map((item: unknown) => sanitizeRemoteGalleryItem(item))
+              .filter((item: GalleryItem | null): item is GalleryItem => Boolean(item));
+          }),
+        ]);
+
+        if (localResult.status === "rejected" && remoteResult.status === "rejected") {
+          throw new Error("works manifests not found");
+        }
+
+        const localItems = localResult.status === "fulfilled"
+          ? (localResult.value as GalleryItem[]).filter((item) => getGalleryImageUrl(item))
+          : [];
+        const remoteItems = remoteResult.status === "fulfilled" ? remoteResult.value : [];
+        const localGalleryNos = new Set(localItems.map((item) => String(item.galleryNo || item.gallery_no || "").toUpperCase()));
+        const nextItems = [
+          ...remoteItems.filter((item) => !localGalleryNos.has(String(item.galleryNo || item.gallery_no || "").toUpperCase())),
+          ...localItems,
+        ].sort((a, b) => galleryNoNumber(b.galleryNo || b.gallery_no) - galleryNoNumber(a.galleryNo || a.gallery_no));
+
+        if (alive) setItems(nextItems);
       } catch {
         if (alive) setError("制作事例の読み込みに失敗しました。");
       } finally {
