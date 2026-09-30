@@ -1,0 +1,12 @@
+{
+  "stickers": [
+    { "file": "01.png", "popup": { "scene": "hearts" },   "effect": { "preset": "heart_rise" } },
+    { "file": "02.png", "popup": { "scene": "sunburst", "motion": "bounce" }, "effect": { "preset": "sparkle" } },
+    { "file": "03.png", "popup": { "scene": "confetti" }, "effect": { "preset": "fireworks" } },
+    { "file": "04.png", "popup": { "scene": "slam" },     "effect": { "preset": "paws" } },
+    { "file": "05.png", "popup": { "scene": "night" },    "effect": { "preset": "night" } },
+    { "file": "06.png", "popup": { "scene": "shock" },    "effect": { "preset": "shock" } },
+    { "file": "07.png", "popup": { "scene": "rain" },     "effect": { "preset": "rain" } },
+    { "file": "08.png", "popup": { "scene": "flowers", "colors": { "badge": "#FFF2D8" } }, "effect": { "preset": "sakura" } }
+  ]
+}
